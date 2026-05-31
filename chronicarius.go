@@ -26,37 +26,41 @@ const (
 
 // Chronicum represents a conversation session tied to an owner.
 type Chronicum struct {
-	ID        string    `json:"id" db:"id"`
-	OwnerID   string    `json:"owner_id" db:"owner_id"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	ID      string
+	OwnerID string
+
+	// StartedAt indicates when the session commenced.
+	StartedAt time.Time
 }
 
 // Actum represents a single recorded action or message within a session.
 type Actum struct {
-	ID          string    `json:"id" db:"id"`
-	ChronicumID string    `json:"chronicum_id" db:"chronicum_id"`
-	Kind        ActumKind `json:"kind" db:"kind"`
-	ActorKind   ActorKind `json:"actor_kind" db:"actor_kind"`
-	Actor       string    `json:"actor" db:"actor"`
-	Content     string    `json:"content" db:"content"`
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`
+	ID          string
+	ChronicumID string
+	Kind        ActumKind
+	ActorKind   ActorKind
+	Actor       string
+	Content     string
+
+	// At is the exact moment the action occurred.
+	At time.Time
 }
 
-// Chronicarius is the recorder of history.
+// Chronicarius is the recorder of actum and manager of chronicum.
 type Chronicarius interface {
-	AddActum(ctx context.Context, ownerID string, actum Actum) error
+	RecordActum(ctx context.Context, ownerID string, actum Actum) error
 
-	// GetActum retrieves message history.
+	// GetActa retrieves acta of a chronicum.
 	// CONTRACT: Results are always guaranteed in chronological order (Old to New).
-	GetActum(ctx context.Context, chronicumID string, opts ...GetOption) ([]Actum, error)
+	GetActa(ctx context.Context, chronicumID string, opts ...GetOption) ([]Actum, error)
 
-	// ListChronicum retrieves session metadata belonging to an owner.
+	// ListChronicum retrieves chronicum metadata belonging to an owner.
 	// CONTRACT: Results are always guaranteed in anti-chronological order (Most Recent to Old).
 	ListChronicum(ctx context.Context, ownerID string, opts ...ListOption) ([]Chronicum, error)
 }
 
 // ==============================================================================
-// Functional Options for GetActum
+// Functional Options for GetActa
 // ==============================================================================
 
 // getOptions holds configuration for filtering Actum retrieval.
