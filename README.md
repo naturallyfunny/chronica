@@ -24,7 +24,7 @@ Chronica treats AI conversations not just as text messages, but as a stream of *
 
 * **`Chronicum`**: A 1-Human-to-N-Agents session tied to an owner.
 * **`Actum`**: A single recorded action (e.g., message, thought) within a session.
-* **`Chronicarius`**: The concrete orchestrator that enforces validation and ownership policies. Construct with `chronica.New(store)`.
+* **`Chronicarius`**: The concrete orchestrator that enforces validation and ownership policies. Construct with `chronica.NewChronicarius(store)`.
 * **`Store`**: The interface backends implement — four atomic, coarse-grained methods (`Create`, `Record`, `Acta`, `Get`).
 
 > **Note on Naming:** `Chronica` and `Acta` are simply the Latin plural forms of `Chronicum` and `Actum`. You will see these used throughout the SDK's package name and slice returns (e.g., `[]Actum` is referred to as Acta).
@@ -47,10 +47,10 @@ import (
     "go.naturallyfunny.dev/chronica/inmemory"
 )
 
-c := chronica.New(inmemory.NewInMemoryStore())
+c := chronica.NewChronicarius(inmemory.NewStore())
 ```
 
-To use a real backend (e.g. Postgres, MongoDB), implement the four-method `chronica.Store` interface and pass it to `chronica.New`. Your backend can be verified against the conformance suite using `storetest.Run`.
+To use a real backend (e.g. Postgres, MongoDB), implement the four-method `chronica.Store` interface and pass it to `chronica.NewChronicarius`. Your backend can be verified against the conformance suite using `storetest.Run`.
 
 ### 1. Recording an Action (RecordActum)
 

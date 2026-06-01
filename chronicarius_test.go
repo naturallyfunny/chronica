@@ -13,8 +13,8 @@ import (
 
 func TestChronicarius_RecordActum_Validation(t *testing.T) {
 	ctx := context.Background()
-	store := inmemory.NewInMemoryStore()
-	c := chronica.New(store)
+	store := inmemory.NewStore()
+	c := chronica.NewChronicarius(store)
 
 	// 1. Empty Owner ID
 	_, err := c.RecordActum(ctx, "", chronica.Actum{
@@ -42,8 +42,8 @@ func TestChronicarius_RecordActum_Validation(t *testing.T) {
 
 func TestChronicarius_RecordActum_AutoCreateAndOwnership(t *testing.T) {
 	ctx := context.Background()
-	store := inmemory.NewInMemoryStore()
-	c := chronica.New(store)
+	store := inmemory.NewStore()
+	c := chronica.NewChronicarius(store)
 
 	actum := chronica.Actum{
 		ChronicumID: "session-1",
@@ -86,8 +86,8 @@ func TestChronicarius_RecordActum_AutoCreateAndOwnership(t *testing.T) {
 
 func TestChronicarius_GetActa_OwnershipAndFilters(t *testing.T) {
 	ctx := context.Background()
-	store := inmemory.NewInMemoryStore()
-	c := chronica.New(store)
+	store := inmemory.NewStore()
+	c := chronica.NewChronicarius(store)
 
 	// Create session and insert some events
 	_, err := c.RecordActum(ctx, "owner-1", chronica.Actum{
@@ -176,10 +176,10 @@ func TestChronicarius_GetActa_OwnershipAndFilters(t *testing.T) {
 
 func TestChronicarius_WithIDGen(t *testing.T) {
 	ctx := context.Background()
-	store := inmemory.NewInMemoryStore()
+	store := inmemory.NewStore()
 
 	customID := "custom-monotonic-id-123"
-	c := chronica.New(store, chronica.WithIDGen(func() string {
+	c := chronica.NewChronicarius(store, chronica.WithIDGen(func() string {
 		return customID
 	}))
 
@@ -200,8 +200,8 @@ func TestChronicarius_WithIDGen(t *testing.T) {
 
 func TestChronicarius_GetChronicum_Validation(t *testing.T) {
 	ctx := context.Background()
-	store := inmemory.NewInMemoryStore()
-	c := chronica.New(store)
+	store := inmemory.NewStore()
+	c := chronica.NewChronicarius(store)
 
 	// Try getting with empty ownerID
 	_, err := c.GetChronicum(ctx, "", "session-1")
@@ -218,8 +218,8 @@ func TestChronicarius_GetChronicum_Validation(t *testing.T) {
 
 func TestChronicarius_Validate_OccurredAtAndIdempotency(t *testing.T) {
 	ctx := context.Background()
-	store := inmemory.NewInMemoryStore()
-	c := chronica.New(store)
+	store := inmemory.NewStore()
+	c := chronica.NewChronicarius(store)
 
 	occTime := time.Now().Add(-10 * time.Minute)
 	stored, err := c.RecordActum(ctx, "owner-1", chronica.Actum{
@@ -266,8 +266,8 @@ func TestChronicarius_Validate_OccurredAtAndIdempotency(t *testing.T) {
 
 func TestChronicarius_RecordActum_AutoCreateRaceCondition(t *testing.T) {
 	ctx := context.Background()
-	store := inmemory.NewInMemoryStore()
-	c := chronica.New(store)
+	store := inmemory.NewStore()
+	c := chronica.NewChronicarius(store)
 
 	const numConcurrent = 20
 	errChan := make(chan error, numConcurrent)

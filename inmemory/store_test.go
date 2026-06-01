@@ -8,5 +8,5 @@ import (
 )
 
 func TestConformance(t *testing.T) {
-	storetest.Run(t, inmemory.NewInMemoryStore)
+	storetest.Run(t, inmemory.NewStore)
 }

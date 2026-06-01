@@ -12,9 +12,9 @@ import (
 	"go.naturallyfunny.dev/chronica"
 )
 
-// NewInMemoryStore returns a new, empty in-memory Store.
+// NewStore returns a new, empty in-memory Store.
 // The returned store is safe for concurrent use.
-func NewInMemoryStore() chronica.Store {
+func NewStore() chronica.Store {
 	return &store{sessions: make(map[string]*session)}
 }
 

@@ -22,7 +22,7 @@ func WithIDGen(fn func() string) Option {
 }
 
 // Chronicarius is the policy orchestrator for session management.
-// Construct one with New; it is safe for concurrent use.
+// Construct one with NewChronicarius; it is safe for concurrent use.
 // Input validation and owner-scoping are enforced here; persistence is
 // delegated to the Store.
 type Chronicarius struct {
@@ -30,8 +30,8 @@ type Chronicarius struct {
 	idGen func() string
 }
 
-// New creates a Chronicarius backed by store.
-func New(store Store, opts ...Option) *Chronicarius {
+// NewChronicarius creates a Chronicarius backed by store.
+func NewChronicarius(store Store, opts ...Option) *Chronicarius {
 	c := &Chronicarius{store: store, idGen: defaultID}
 	for _, o := range opts {
 		o(c)
