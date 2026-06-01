@@ -13,7 +13,7 @@ import (
 
 func TestChronicarius_RecordActum_Validation(t *testing.T) {
 	ctx := context.Background()
-	store := inmemory.New()
+	store := inmemory.NewInMemoryStore()
 	c := chronica.New(store)
 
 	// 1. Empty Owner ID
@@ -42,7 +42,7 @@ func TestChronicarius_RecordActum_Validation(t *testing.T) {
 
 func TestChronicarius_RecordActum_AutoCreateAndOwnership(t *testing.T) {
 	ctx := context.Background()
-	store := inmemory.New()
+	store := inmemory.NewInMemoryStore()
 	c := chronica.New(store)
 
 	actum := chronica.Actum{
@@ -86,7 +86,7 @@ func TestChronicarius_RecordActum_AutoCreateAndOwnership(t *testing.T) {
 
 func TestChronicarius_GetActa_OwnershipAndFilters(t *testing.T) {
 	ctx := context.Background()
-	store := inmemory.New()
+	store := inmemory.NewInMemoryStore()
 	c := chronica.New(store)
 
 	// Create session and insert some events
@@ -176,7 +176,7 @@ func TestChronicarius_GetActa_OwnershipAndFilters(t *testing.T) {
 
 func TestChronicarius_WithIDGen(t *testing.T) {
 	ctx := context.Background()
-	store := inmemory.New()
+	store := inmemory.NewInMemoryStore()
 
 	customID := "custom-monotonic-id-123"
 	c := chronica.New(store, chronica.WithIDGen(func() string {
@@ -200,7 +200,7 @@ func TestChronicarius_WithIDGen(t *testing.T) {
 
 func TestChronicarius_GetChronicum_Validation(t *testing.T) {
 	ctx := context.Background()
-	store := inmemory.New()
+	store := inmemory.NewInMemoryStore()
 	c := chronica.New(store)
 
 	// Try getting with empty ownerID
@@ -218,7 +218,7 @@ func TestChronicarius_GetChronicum_Validation(t *testing.T) {
 
 func TestChronicarius_Validate_OccurredAtAndIdempotency(t *testing.T) {
 	ctx := context.Background()
-	store := inmemory.New()
+	store := inmemory.NewInMemoryStore()
 	c := chronica.New(store)
 
 	occTime := time.Now().Add(-10 * time.Minute)
@@ -266,7 +266,7 @@ func TestChronicarius_Validate_OccurredAtAndIdempotency(t *testing.T) {
 
 func TestChronicarius_RecordActum_AutoCreateRaceCondition(t *testing.T) {
 	ctx := context.Background()
-	store := inmemory.New()
+	store := inmemory.NewInMemoryStore()
 	c := chronica.New(store)
 
 	const numConcurrent = 20

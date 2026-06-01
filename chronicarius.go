@@ -13,6 +13,10 @@ type Option func(*Chronicarius)
 // WithIDGen overrides the default ID generator.
 // The default generates a random 128-bit hex string via crypto/rand.
 // Use this to inject ULID, UUIDv7, or a deterministic generator for tests.
+//
+// fn MUST return globally unique values. Collisions are not detected by
+// Chronicarius or the Store; a duplicate Actum.ID within a chronicum will
+// be stored as a distinct record.
 func WithIDGen(fn func() string) Option {
 	return func(c *Chronicarius) { c.idGen = fn }
 }
@@ -67,19 +71,21 @@ func (c *Chronicarius) RecordActum(ctx context.Context, ownerID string, actum Ac
 
 	_, err := c.GetChronicum(ctx, ownerID, actum.ChronicumID)
 	if err != nil {
-		if errors.Is(err, ErrChronicumNotFound) {
-			newSession := Chronicum{
-				ID:      actum.ChronicumID,
-				OwnerID: ownerID,
-			}
-			if errCreate := c.store.Create(ctx, newSession); errCreate != nil {
-				if errors.Is(errCreate, ErrChronicumExists) {
-					return Actum{}, ErrChronicumNotFound
-				}
+		if !errors.Is(err, ErrChronicumNotFound) {
+			return Actum{}, err
+		}
+		// Session not visible to this owner. Try to create it.
+		newSession := Chronicum{ID: actum.ChronicumID, OwnerID: ownerID}
+		if errCreate := c.store.Create(ctx, newSession); errCreate != nil {
+			if !errors.Is(errCreate, ErrChronicumExists) {
 				return Actum{}, errCreate
 			}
-		} else {
-			return Actum{}, err
+			// Lost a concurrent create race. Re-resolve ownership:
+			//   - same owner created it concurrently → proceed to Record
+			//   - different owner created it         → ErrChronicumNotFound
+			if _, errGet := c.GetChronicum(ctx, ownerID, actum.ChronicumID); errGet != nil {
+				return Actum{}, errGet
+			}
 		}
 	}
 
@@ -144,8 +150,14 @@ type ActaOption func(*ActaOptions)
 // filters. Filter is applied before the limit (filter-then-limit), so LastN
 // counts only acta that pass the Kinds and ActorKinds filters. The selected acta
 // are still returned in chronological order (Old → New).
+//
+// n <= 0 means no limit; negative values are treated identically to zero.
 func WithLastN(n int) ActaOption {
-	return func(o *ActaOptions) { o.LastN = n }
+	return func(o *ActaOptions) {
+		if n > 0 {
+			o.LastN = n
+		}
+	}
 }
 
 // WithActumKinds filters results to the specified Actum kinds only.

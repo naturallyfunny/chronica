@@ -12,9 +12,9 @@ import (
 	"go.naturallyfunny.dev/chronica"
 )
 
-// New returns a new, empty in-memory Store.
+// NewInMemoryStore returns a new, empty in-memory Store.
 // The returned store is safe for concurrent use.
-func New() chronica.Store {
+func NewInMemoryStore() chronica.Store {
 	return &store{sessions: make(map[string]*session)}
 }
 
@@ -27,7 +27,7 @@ type session struct {
 	mu        sync.Mutex
 	c         chronica.Chronicum
 	acta      []chronica.Actum          // ordered by insertion sequence
-	idempKeys map[string]chronica.Actum // idempotencyKey → stored Actum
+	idempKeys map[string]chronica.Actum // idempotencyKey → stored Actum; grows without bound — not for production use
 }
 
 // Create implements chronica.Store.
@@ -39,7 +39,9 @@ func (s *store) Create(ctx context.Context, c chronica.Chronicum) error {
 		return chronica.ErrChronicumExists
 	}
 
-	c.StartedAt = time.Now()
+	now := time.Now()
+	c.StartedAt = now
+	c.LastActivityAt = now
 	s.sessions[c.ID] = &session{
 		c:         c,
 		idempKeys: make(map[string]chronica.Actum),
@@ -56,7 +58,7 @@ func (s *store) Record(ctx context.Context, a chronica.Actum) (chronica.Actum, e
 	s.mu.Unlock()
 
 	if !ok {
-		// Should not happen if caller used CreateChronicum properly,
+		// Should not happen when reached via Chronicarius.RecordActum,
 		// but we protect against it anyway.
 		return chronica.Actum{}, chronica.ErrChronicumNotFound
 	}

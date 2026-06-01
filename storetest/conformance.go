@@ -277,7 +277,7 @@ func testLastActivityAtBumps(t *testing.T, store chronica.Store) {
 		t.Errorf("after first: LastActivityAt=%v, want %v", c1.LastActivityAt, stored1.At)
 	}
 
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
 
 	stored2, err := store.Record(ctx, makeActum("id-2", "cid", "second"))
 	if err != nil {

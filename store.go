@@ -158,11 +158,21 @@ type Store interface {
 	//   - return the fully-populated stored Actum.
 	//
 	// a.ID is already assigned and a is already validated by Chronicarius.
+	//
+	// OWNERSHIP BOUNDARY: Record takes no ownerID and performs no ownership
+	// check. Tenant isolation on the write path is enforced by Chronicarius
+	// (via GetChronicum) before this is called. Implementations MUST NOT be
+	// called directly without that guard; doing so can write across tenants.
 	Record(ctx context.Context, a Actum) (Actum, error)
 
 	// Acta returns acta for chronicumID, in insertion order
 	// (oldest first). q.Kinds and q.ActorKinds filters first; q.LastN limits after filtering
 	// (filter-then-limit). Zero values mean "no filter / no limit".
+	//
+	// OWNERSHIP BOUNDARY: Acta takes no ownerID and performs no ownership
+	// check. Tenant isolation on the read path is enforced by Chronicarius
+	// (via GetChronicum) before this is called. Implementations MUST NOT be
+	// called directly without that guard; doing so can return any owner's history.
 	Acta(ctx context.Context, chronicumID string, q ActaQuery) ([]Actum, error)
 
 	// Get returns a single Chronicum by ID, scoped to ownerID.
