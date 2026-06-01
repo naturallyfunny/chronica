@@ -1,14 +1,14 @@
-// Package chronicatest provides a conformance test suite for chronica.Store
-// implementations. Each backend calls RunConformance from its own test file.
+// Package storetest provides a conformance test suite for chronica.Store
+// implementations. Each backend calls Run from its own test file.
 //
 // Usage:
 //
 //	func TestConformance(t *testing.T) {
-//	    chronicatest.RunConformance(t, func() chronica.Store {
+//	    storetest.Run(t, func() chronica.Store {
 //	        return newMyBackend(t)
 //	    })
 //	}
-package chronicatest
+package storetest
 
 import (
 	"context"
@@ -21,9 +21,9 @@ import (
 	"go.naturallyfunny.dev/chronica"
 )
 
-// RunConformance runs the full Store conformance suite.
+// Run runs the full Store conformance suite.
 // newStore is called once per sub-test and MUST return a fresh, empty store.
-func RunConformance(t *testing.T, newStore func() chronica.Store) {
+func Run(t *testing.T, newStore func() chronica.Store) {
 	t.Helper()
 	cases := []struct {
 		name string
@@ -66,21 +66,17 @@ func testCrossOwnerIsolation(t *testing.T, store chronica.Store) {
 
 	err := store.Create(ctx, chronica.Chronicum{ID: "session", OwnerID: "owner1"})
 	if err != nil {
-		t.Fatalf("setup CreateChronicum: %v", err)
+		t.Fatalf("setup Create: %v", err)
 	}
 
 	if _, err := store.Record(ctx, makeActum("id-1", "session", "hello")); err != nil {
-		t.Fatalf("setup Append: %v", err)
+		t.Fatalf("setup Record: %v", err)
 	}
 
 	_, err = store.Get(ctx, "owner2", "session")
 	if !errors.Is(err, chronica.ErrChronicumNotFound) {
-		t.Errorf("GetChronicum cross-owner: want ErrChronicumNotFound, got %v", err)
+		t.Errorf("Get cross-owner: want ErrChronicumNotFound, got %v", err)
 	}
-
-	// For cross-owner append/acta isolation: since Store no longer checks owner on Acta/Record,
-	// cross-owner isolation is enforced exclusively by the orchestrator (which checks Get first).
-	// Therefore, testing cross-owner Record/Acta directly on the Store is no longer applicable.
 }
 
 func testIdempotency(t *testing.T, store chronica.Store) {
@@ -132,7 +128,7 @@ func testIdempotencyStoredWins(t *testing.T, store chronica.Store) {
 	a2.IdempotencyKey = "key-1"
 	second, err := store.Record(ctx, a2)
 	if err != nil {
-		t.Fatalf("second Append: %v", err)
+		t.Fatalf("second Record: %v", err)
 	}
 	if second.Content != first.Content {
 		t.Errorf("stored wins: want %q, got %q", first.Content, second.Content)
@@ -267,7 +263,7 @@ func testLastActivityAtBumps(t *testing.T, store chronica.Store) {
 		t.Helper()
 		c, err := store.Get(ctx, "owner", id)
 		if err != nil {
-			t.Fatalf("GetChronicum: %v", err)
+			t.Fatalf("Get: %v", err)
 		}
 		return c
 	}
@@ -295,8 +291,6 @@ func testLastActivityAtBumps(t *testing.T, store chronica.Store) {
 		t.Errorf("LastActivityAt did not advance: %v → %v", c1.LastActivityAt, c2.LastActivityAt)
 	}
 }
-
-
 
 func testAppendReturnsFullActum(t *testing.T, store chronica.Store) {
 	t.Helper()
@@ -335,9 +329,6 @@ func testAppendReturnsFullActum(t *testing.T, store chronica.Store) {
 	}
 }
 
-// testInsertionOrder verifies that Acta returns acta in insertion order even
-// when multiple appends happen rapidly (potentially same wall-clock At).
-// Ordering MUST be determined by the store's per-chronicum sequence, not by At.
 func testInsertionOrder(t *testing.T, store chronica.Store) {
 	t.Helper()
 	ctx := context.Background()
@@ -368,9 +359,6 @@ func testInsertionOrder(t *testing.T, store chronica.Store) {
 	}
 }
 
-// testConcurrentAppend verifies that concurrent Append calls on the same
-// chronicum do not corrupt state: all items are persisted, none are duplicated,
-// and the returned slice has the correct length.
 func testConcurrentAppend(t *testing.T, store chronica.Store) {
 	t.Helper()
 	ctx := context.Background()
@@ -393,7 +381,7 @@ func testConcurrentAppend(t *testing.T, store chronica.Store) {
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
-				t.Errorf("goroutine %d Append: %v", i, err)
+				t.Errorf("goroutine %d Record: %v", i, err)
 				errored = true
 				return
 			}
