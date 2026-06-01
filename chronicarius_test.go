@@ -63,7 +63,7 @@ func TestChronicarius_RecordActum_AutoCreateAndOwnership(t *testing.T) {
 	}
 
 	// Verify session exists and is owned by owner-1
-	session, err := c.GetChronicum(ctx, "owner-1", "session-1")
+	session, err := c.GetChronicum(ctx, "session-1")
 	if err != nil {
 		t.Fatalf("failed to get session: %v", err)
 	}
@@ -203,14 +203,8 @@ func TestChronicarius_GetChronicum_Validation(t *testing.T) {
 	store := inmemory.NewStore()
 	c := chronica.NewChronicarius(store)
 
-	// Try getting with empty ownerID
-	_, err := c.GetChronicum(ctx, "", "session-1")
-	if !errors.Is(err, chronica.ErrEmptyOwnerID) {
-		t.Errorf("want ErrEmptyOwnerID, got %v", err)
-	}
-
 	// Non-existent session
-	_, err = c.GetChronicum(ctx, "owner-1", "session-non-existent")
+	_, err := c.GetChronicum(ctx, "session-non-existent")
 	if !errors.Is(err, chronica.ErrChronicumNotFound) {
 		t.Errorf("want ErrChronicumNotFound, got %v", err)
 	}

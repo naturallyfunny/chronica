@@ -69,7 +69,7 @@ func (c *Chronicarius) RecordActum(ctx context.Context, ownerID string, actum Ac
 		return Actum{}, err
 	}
 
-	_, err := c.GetChronicum(ctx, ownerID, actum.ChronicumID)
+	_, err := c.ownerGuard(ctx, ownerID, actum.ChronicumID)
 	if err != nil {
 		if !errors.Is(err, ErrChronicumNotFound) {
 			return Actum{}, err
@@ -83,7 +83,7 @@ func (c *Chronicarius) RecordActum(ctx context.Context, ownerID string, actum Ac
 			// Lost a concurrent create race. Re-resolve ownership:
 			//   - same owner created it concurrently → proceed to Record
 			//   - different owner created it         → ErrChronicumNotFound
-			if _, errGet := c.GetChronicum(ctx, ownerID, actum.ChronicumID); errGet != nil {
+			if _, errGet := c.ownerGuard(ctx, ownerID, actum.ChronicumID); errGet != nil {
 				return Actum{}, errGet
 			}
 		}
@@ -105,7 +105,7 @@ func (c *Chronicarius) GetActa(ctx context.Context, ownerID, chronicumID string,
 	if ownerID == "" {
 		return nil, ErrEmptyOwnerID
 	}
-	if _, err := c.GetChronicum(ctx, ownerID, chronicumID); err != nil {
+	if _, err := c.ownerGuard(ctx, ownerID, chronicumID); err != nil {
 		return nil, err
 	}
 	var o ActaOptions
@@ -115,17 +115,27 @@ func (c *Chronicarius) GetActa(ctx context.Context, ownerID, chronicumID string,
 	return c.store.Acta(ctx, chronicumID, ActaQuery(o))
 }
 
-// GetChronicum retrieves a single Chronicum metadata belonging to ownerID.
-//
-// CONTRACT:
-//   - ownerID MUST be non-empty; returns ErrEmptyOwnerID if empty.
-//   - If the chronicum does not exist or is not owned by ownerID, returns
-//     ErrChronicumNotFound.
-func (c *Chronicarius) GetChronicum(ctx context.Context, ownerID, chronicumID string) (Chronicum, error) {
+// GetChronicum retrieves a single Chronicum by ID.
+// Returns ErrChronicumNotFound if no chronicum with that ID exists.
+func (c *Chronicarius) GetChronicum(ctx context.Context, chronicumID string) (Chronicum, error) {
+	return c.store.Get(ctx, chronicumID)
+}
+
+// ownerGuard fetches the chronicum and verifies it belongs to ownerID.
+// Returns ErrEmptyOwnerID if ownerID is empty.
+// Returns ErrChronicumNotFound if the chronicum does not exist or belongs to a different owner.
+func (c *Chronicarius) ownerGuard(ctx context.Context, ownerID, chronicumID string) (Chronicum, error) {
 	if ownerID == "" {
 		return Chronicum{}, ErrEmptyOwnerID
 	}
-	return c.store.Get(ctx, ownerID, chronicumID)
+	sess, err := c.store.Get(ctx, chronicumID)
+	if err != nil {
+		return Chronicum{}, err
+	}
+	if sess.OwnerID != ownerID {
+		return Chronicum{}, ErrChronicumNotFound
+	}
+	return sess, nil
 }
 
 // =============================================================================

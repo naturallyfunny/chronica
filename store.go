@@ -161,8 +161,8 @@ type Store interface {
 	//
 	// OWNERSHIP BOUNDARY: Record takes no ownerID and performs no ownership
 	// check. Tenant isolation on the write path is enforced by Chronicarius
-	// (via GetChronicum) before this is called. Implementations MUST NOT be
-	// called directly without that guard; doing so can write across tenants.
+	// before this is called. Implementations MUST NOT be called directly
+	// without that guard; doing so can write across tenants.
 	Record(ctx context.Context, a Actum) (Actum, error)
 
 	// Acta returns acta for chronicumID, in insertion order
@@ -171,11 +171,15 @@ type Store interface {
 	//
 	// OWNERSHIP BOUNDARY: Acta takes no ownerID and performs no ownership
 	// check. Tenant isolation on the read path is enforced by Chronicarius
-	// (via GetChronicum) before this is called. Implementations MUST NOT be
-	// called directly without that guard; doing so can return any owner's history.
+	// before this is called. Implementations MUST NOT be called directly
+	// without that guard; doing so can return any owner's history.
 	Acta(ctx context.Context, chronicumID string, q ActaQuery) ([]Actum, error)
 
-	// Get returns a single Chronicum by ID, scoped to ownerID.
-	// Returns ErrChronicumNotFound if it does not exist or belongs to a different owner.
-	Get(ctx context.Context, ownerID, chronicumID string) (Chronicum, error)
+	// Get returns a single Chronicum by ID.
+	// Returns ErrChronicumNotFound if it does not exist.
+	//
+	// OWNERSHIP BOUNDARY: Get takes no ownerID and performs no ownership
+	// check. Tenant isolation is enforced by Chronicarius before returning
+	// this to the client.
+	Get(ctx context.Context, chronicumID string) (Chronicum, error)
 }

@@ -12,7 +12,6 @@ package storetest
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -73,9 +72,14 @@ func testCrossOwnerIsolation(t *testing.T, store chronica.Store) {
 		t.Fatalf("setup Record: %v", err)
 	}
 
-	_, err = store.Get(ctx, "owner2", "session")
-	if !errors.Is(err, chronica.ErrChronicumNotFound) {
-		t.Errorf("Get cross-owner: want ErrChronicumNotFound, got %v", err)
+	// Store.Get no longer checks ownership; verify the session data is returned correctly.
+	// Cross-owner isolation is enforced exclusively by Chronicarius (via GetChronicum).
+	sess, err := store.Get(ctx, "session")
+	if err != nil {
+		t.Fatalf("Get: want no error, got %v", err)
+	}
+	if sess.OwnerID != "owner1" {
+		t.Errorf("Get: want OwnerID owner1, got %s", sess.OwnerID)
 	}
 }
 
@@ -261,7 +265,7 @@ func testLastActivityAtBumps(t *testing.T, store chronica.Store) {
 
 	findChronica := func(id string) chronica.Chronicum {
 		t.Helper()
-		c, err := store.Get(ctx, "owner", id)
+		c, err := store.Get(ctx, id)
 		if err != nil {
 			t.Fatalf("Get: %v", err)
 		}

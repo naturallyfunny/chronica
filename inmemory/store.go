@@ -135,7 +135,7 @@ func (s *store) Acta(ctx context.Context, chronicumID string, q chronica.ActaQue
 }
 
 // Get implements chronica.Store.
-func (s *store) Get(ctx context.Context, ownerID, chronicumID string) (chronica.Chronicum, error) {
+func (s *store) Get(ctx context.Context, chronicumID string) (chronica.Chronicum, error) {
 	s.mu.Lock()
 	sess, ok := s.sessions[chronicumID]
 	s.mu.Unlock()
@@ -146,10 +146,6 @@ func (s *store) Get(ctx context.Context, ownerID, chronicumID string) (chronica.
 
 	sess.mu.Lock()
 	defer sess.mu.Unlock()
-
-	if sess.c.OwnerID != ownerID {
-		return chronica.Chronicum{}, chronica.ErrChronicumNotFound
-	}
 
 	return sess.c, nil
 }
