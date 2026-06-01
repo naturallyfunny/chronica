@@ -88,9 +88,8 @@ acta, err := c.GetActa(ctx, "user-999", "session-123",
 
 ### 3. Fetching Session Metadata (GetChronicum)
 
-Retrieve metadata for a single session while verifying that it belongs to the caller.
+Retrieve metadata for a single session by ID.
 
 ```go
-// Get session metadata and verify ownership
-session, err := c.GetChronicum(ctx, "user-999", "session-123")
+session, err := c.GetChronicum(ctx, "session-123")
 ```
