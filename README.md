@@ -6,7 +6,7 @@ _  /    __  /_/ /__  /_/ /  / / /_   |/ / __  / _  /    __  /| |
 \____/  /_/ /_/  /_/ |_| \____/ /_/ |_/  /___/  \____/  /_/  |_|
 ```
 
-A lightweight, 1 Human to N Agent Session System SDK designed specifically for Multi-Agent Agentic AI ecosystems.
+A lightweight, 1 Human to N Agent Session System SDK designed for Single-Agent to Multi-Agent Agentic AI ecosystems.
 
 Chronica treats AI conversations not just as text messages, but as a stream of **Actions (Actum)** within a **Session (Chronicum)**. It is built with pure Go idioms, functional options, and strict chronological contracts. 
 
@@ -15,7 +15,7 @@ Chronica treats AI conversations not just as text messages, but as a stream of *
 - **Agent-First Design:** Natively supports various AI actions (`Message`, `Thought`, `ToolRequest`, `ToolResponse`) beyond just standard text.
 - **Identity Flexibility:** Agnostic to your identity provider. It uses raw string identifiers (`OwnerID` and `Actor`) to map sessions and actors.
 - **Strict Chronological Contracts:** - `GetActa` always returns messages in chronological order (Old $\rightarrow$ New) for LLM context windows.
-  - `ListChronicum` always returns sessions in anti-chronological order (New $\rightarrow$ Old) for UI listing.
+- `ListChronicum` always returns sessions in anti-chronological order (New $\rightarrow$ Old) for UI listing.
 - **Sliding Window Context:** Built-in `WithLastN` option handles AI context windows cleanly while maintaining chronological order.
 
 ## Core Concepts
