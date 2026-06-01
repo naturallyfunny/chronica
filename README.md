@@ -14,15 +14,18 @@ Chronica treats AI conversations not just as text messages, but as a stream of *
 
 - **Agent-First Design:** Natively supports various AI actions (`Message`, `Thought`, `ToolRequest`, `ToolResponse`) beyond just standard text.
 - **Identity Flexibility:** Agnostic to your identity provider. It uses raw string identifiers (`OwnerID` and `Actor`) to map sessions and actors.
-- **Strict Chronological Contracts:** `GetActa` always returns acta in a stable total order consistent with insertion order (Old → New) for LLM context windows. `ListChronicum` always returns sessions in anti-chronological order (New → Old) for UI listing.
-- **Ownership Enforcement:** The SDK is the authorization boundary. Both `GetActa` and `RecordActum` are scoped to an `ownerID`; cross-tenant reads and writes are rejected.
-- **Sliding Window Context:** Built-in `WithLastN` applies filter-then-limit, so `LastN` counts only acta that pass the kind filter.
+- **Strict Chronological Contracts:** `GetActa` always returns acta in a stable total order consistent with insertion order (Old → New) for LLM context windows.
+- **Ownership Enforcement:** The SDK is the authorization boundary. Both `GetActa` and `RecordActum` are scoped to an `ownerID` (the session owner); cross-tenant reads and writes are rejected.
+- **Sliding Window Context:** Built-in `WithLastN` applies filter-then-limit, so `LastN` counts only acta that pass both the kind and actor kind filters.
+- **Actor Kind Filtering:** Supports filtering activities by actor types (`ActorHuman`, `ActorAgent`, `ActorSystem`), allowing LLM contexts to easily exclude internal thoughts or system events.
+- **Smart Core, Dumb Edges:** Logic for ownership verification, ID assignment, validation, and find-or-create orchestration is housed inside the core SDK (`Chronicarius`), keeping database implementations (`Store`) simple and query-efficient.
 
 ## Core Concepts
 
 * **`Chronicum`**: A 1-Human-to-N-Agents session tied to an owner.
 * **`Actum`**: A single recorded action (e.g., message, thought) within a session.
-* **`Chronicarius`**: The core interface acting as the recorder of history.
+* **`Chronicarius`**: The concrete orchestrator that enforces validation and ownership policies. Construct with `chronica.New(store)`.
+* **`Store`**: The interface backends implement — four atomic, coarse-grained methods (`Create`, `Record`, `Acta`, `Get`).
 
 > **Note on Naming:** `Chronica` and `Acta` are simply the Latin plural forms of `Chronicum` and `Actum`. You will see these used throughout the SDK's package name and slice returns (e.g., `[]Actum` is referred to as Acta).
 
@@ -34,55 +37,60 @@ go get go.naturallyfunny.dev/chronica
 
 ## Quick Start
 
-### 1. Recording an Action (RecordActum)
+### 0. Pick (or implement) a Store
 
-`RecordActum` acts as an upsert for the chronicum. If `ChronicumID` does not exist, the implementation creates it and binds it to `ownerID`. On success it returns the fully-populated `Actum` with any server-assigned `ID` and `At`.
+The SDK ships a thread-safe in-memory store for development and tests:
 
 ```go
-import "go.naturallyfunny.dev/chronica"
+import (
+    "go.naturallyfunny.dev/chronica"
+    "go.naturallyfunny.dev/chronica/inmemory"
+)
 
+c := chronica.New(inmemory.New())
+```
+
+To use a real backend (e.g. Postgres, MongoDB), implement the four-method `chronica.Store` interface and pass it to `chronica.New`. Your backend can be verified against the conformance suite using `storetest.Run`.
+
+### 1. Recording an Action (RecordActum)
+
+`RecordActum` records an action in a chronicum. If the `ChronicumID` does not exist, the orchestrator auto-creates it and binds it to `ownerID`. On success it returns the fully-populated `Actum` with server-assigned `ID` and `At`.
+
+Supply an `IdempotencyKey` to make retries safe: a repeated call with the same key returns the previously stored `Actum` without writing a duplicate.
+
+```go
 // Example: An AI agent replying to a user
 actum := chronica.Actum{
-    ChronicumID: "session-123",
-    Kind:        chronica.ActumMessage,
-    ActorKind:   chronica.ActorAgent,
-    Actor:       "agent-abc-456", // Use a stable ID; display names belong in a higher layer
-    Content:     "Hello, how can I help you today?",
+    ChronicumID:    "session-123",
+    Kind:           chronica.ActumMessage,
+    ActorKind:      chronica.ActorAgent,
+    Actor:          "agent-abc-456", // Use a stable ID; display names belong in a higher layer
+    Content:        "Hello, how can I help you today?",
+    IdempotencyKey: "req-uuid-xyz",  // optional; makes the call retry-safe
 }
 
-stored, err := chronicarius.RecordActum(ctx, "user-999", actum)
+stored, err := c.RecordActum(ctx, "user-999", actum)
 ```
 
 ### 2. Retrieving Context for AI (GetActa)
 
-Retrieve the history for an LLM prompt, scoped to an owner. Use functional options to filter specific actum kinds and limit the context window. `WithLastN` applies filter-then-limit: it counts only acta that pass the kind filter.
+Retrieve the history for an LLM prompt, scoped to an owner. Use functional options to filter specific actum kinds, actor kinds, and limit the context window.
 
 ```go
-// Fetch the last 20 messages (excluding thoughts), scoped to user-999
-acta, err := chronicarius.GetActa(ctx, "user-999", "session-123",
+// Fetch the last 20 messages (excluding thoughts and system events), scoped to user-999
+acta, err := c.GetActa(ctx, "user-999", "session-123",
     chronica.WithLastN(20),
     chronica.WithActumKinds(chronica.ActumMessage, chronica.ActumToolResponse),
+    chronica.WithActorKinds(chronica.ActorHuman, chronica.ActorAgent),
 )
 // retrieved acta are guaranteed to be in chronological order (Old → New)
 ```
 
-### 3. Listing Sessions for UI (ListChronicum)
+### 3. Fetching Sesi Metadata (GetChronicum)
 
-Retrieve a paginated list of sessions belonging to a specific user, ordered by most recent activity. Use `ListAfter` for stable keyset pagination.
+Retrieve metadata for a single session while verifying that it belongs to the caller.
 
 ```go
-// Fetch the 10 most recently active sessions
-sessions, err := chronicarius.ListChronicum(ctx, "user-999",
-    chronica.ListWithLimit(10),
-)
-// sessions are ordered by (LastActivityAt DESC, ID DESC)
-
-// Fetch the next page using a keyset cursor
-if len(sessions) > 0 {
-    last := sessions[len(sessions)-1]
-    nextPage, err := chronicarius.ListChronicum(ctx, "user-999",
-        chronica.ListWithLimit(10),
-        chronica.ListAfter(last.LastActivityAt, last.ID),
-    )
-}
+// Get session metadata and verify ownership
+session, err := c.GetChronicum(ctx, "user-999", "session-123")
 ```
