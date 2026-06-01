@@ -16,7 +16,7 @@ Chronica treats AI conversations not just as text messages, but as a stream of *
 - **Identity Flexibility:** Agnostic to your identity provider. It uses raw string identifiers (`OwnerID` and `Actor`) to map sessions and actors.
 - **Strict Chronological Contracts:** `GetActa` always returns acta in a stable total order consistent with insertion order (Old → New) for LLM context windows.
 - **Ownership Enforcement:** The SDK is the authorization boundary. Both `GetActa` and `RecordActum` are scoped to an `ownerID` (the session owner); cross-tenant reads and writes are rejected.
-- **Sliding Window Context:** Built-in `WithLastN` applies filter-then-limit, so `LastN` counts only acta that pass both the kind and actor kind filters.
+- **Sliding Window Context:** Built-in `WithLastN(n)` applies filter-then-limit, so `LastN` counts only acta that pass both the kind and actor kind filters. Values `<= 0` mean no limit.
 - **Actor Kind Filtering:** Supports filtering activities by actor types (`ActorHuman`, `ActorAgent`, `ActorSystem`), allowing LLM contexts to easily exclude internal thoughts or system events.
 - **Smart Core, Dumb Edges:** Logic for ownership verification, ID assignment, validation, and find-or-create orchestration is housed inside the core SDK (`Chronicarius`), keeping database implementations (`Store`) simple and query-efficient.
 
@@ -47,7 +47,7 @@ import (
     "go.naturallyfunny.dev/chronica/inmemory"
 )
 
-c := chronica.New(inmemory.New())
+c := chronica.New(inmemory.NewInMemoryStore())
 ```
 
 To use a real backend (e.g. Postgres, MongoDB), implement the four-method `chronica.Store` interface and pass it to `chronica.New`. Your backend can be verified against the conformance suite using `storetest.Run`.
@@ -86,7 +86,7 @@ acta, err := c.GetActa(ctx, "user-999", "session-123",
 // retrieved acta are guaranteed to be in chronological order (Old → New)
 ```
 
-### 3. Fetching Sesi Metadata (GetChronicum)
+### 3. Fetching Session Metadata (GetChronicum)
 
 Retrieve metadata for a single session while verifying that it belongs to the caller.
 
