@@ -63,7 +63,7 @@ func TestChronicarius_RecordActum_AutoCreateAndOwnership(t *testing.T) {
 	}
 
 	// Verify session exists and is owned by owner-1
-	session, err := c.GetChronicum(ctx, "session-1")
+	session, err := c.GetChronicum(ctx, "owner-1", "session-1")
 	if err != nil {
 		t.Fatalf("failed to get session: %v", err)
 	}
@@ -203,10 +203,43 @@ func TestChronicarius_GetChronicum_Validation(t *testing.T) {
 	store := inmemory.NewStore()
 	c := chronica.NewChronicarius(store)
 
-	// Non-existent session
-	_, err := c.GetChronicum(ctx, "session-non-existent")
+	// Seed a session owned by owner-1.
+	_, err := c.RecordActum(ctx, "owner-1", chronica.Actum{
+		ChronicumID: "session-1",
+		Kind:        chronica.ActumMessage,
+		ActorKind:   chronica.ActorHuman,
+		Actor:       "user-1",
+		Content:     "hello",
+	})
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	// Empty ownerID.
+	_, err = c.GetChronicum(ctx, "", "session-1")
+	if !errors.Is(err, chronica.ErrEmptyOwnerID) {
+		t.Errorf("want ErrEmptyOwnerID, got %v", err)
+	}
+
+	// Non-existent session.
+	_, err = c.GetChronicum(ctx, "owner-1", "session-non-existent")
 	if !errors.Is(err, chronica.ErrChronicumNotFound) {
-		t.Errorf("want ErrChronicumNotFound, got %v", err)
+		t.Errorf("want ErrChronicumNotFound for missing session, got %v", err)
+	}
+
+	// Cross-owner access — must be indistinguishable from not-found.
+	_, err = c.GetChronicum(ctx, "owner-2", "session-1")
+	if !errors.Is(err, chronica.ErrChronicumNotFound) {
+		t.Errorf("want ErrChronicumNotFound for cross-owner access, got %v", err)
+	}
+
+	// Correct owner succeeds.
+	sess, err := c.GetChronicum(ctx, "owner-1", "session-1")
+	if err != nil {
+		t.Fatalf("want success for correct owner, got %v", err)
+	}
+	if sess.OwnerID != "owner-1" {
+		t.Errorf("want OwnerID owner-1, got %s", sess.OwnerID)
 	}
 }
 

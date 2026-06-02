@@ -115,10 +115,20 @@ func (c *Chronicarius) GetActa(ctx context.Context, ownerID, chronicumID string,
 	return c.store.Acta(ctx, chronicumID, ActaQuery(o))
 }
 
-// GetChronicum retrieves a single Chronicum by ID.
-// Returns ErrChronicumNotFound if no chronicum with that ID exists.
-func (c *Chronicarius) GetChronicum(ctx context.Context, chronicumID string) (Chronicum, error) {
-	return c.store.Get(ctx, chronicumID)
+// GetChronicum retrieves a single Chronicum scoped to ownerID.
+//
+// CONTRACT:
+//   - ownerID MUST be non-empty; returns ErrEmptyOwnerID if empty.
+//   - If the chronicum does not exist or is not owned by ownerID, returns
+//     ErrChronicumNotFound. The two cases are indistinguishable.
+func (c *Chronicarius) GetChronicum(ctx context.Context, ownerID, chronicumID string) (Chronicum, error) {
+	if err := ctx.Err(); err != nil {
+		return Chronicum{}, err
+	}
+	if ownerID == "" {
+		return Chronicum{}, ErrEmptyOwnerID
+	}
+	return c.ownerGuard(ctx, ownerID, chronicumID)
 }
 
 // ownerGuard fetches the chronicum and verifies it belongs to ownerID.

@@ -72,8 +72,6 @@ func testCrossOwnerIsolation(t *testing.T, store chronica.Store) {
 		t.Fatalf("setup Record: %v", err)
 	}
 
-	// Store.Get no longer checks ownership; verify the session data is returned correctly.
-	// Cross-owner isolation is enforced exclusively by Chronicarius (via GetChronicum).
 	sess, err := store.Get(ctx, "session")
 	if err != nil {
 		t.Fatalf("Get: want no error, got %v", err)
