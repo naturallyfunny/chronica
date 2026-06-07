@@ -61,7 +61,7 @@ Consequences to preserve when editing:
 
 These are the behaviors the conformance suite enforces:
 
-- **Insertion order:** `Acta` returns acta oldest-first in a stable total order. `Actum.At` is advisory wall-clock time set by the Store at insert time and MUST NOT be used for ordering. `OccurredAt` is caller-supplied real-world time and never affects ordering.
+- **Insertion order:** `Acta` returns acta oldest-first in a stable total order. `Actum.At` is advisory wall-clock time set by the Store at insert time and MUST NOT be used for ordering.
 - **Filter-then-limit:** `WithActumKinds` / `WithActorKinds` filter first, then `WithLastN(n)` keeps the most recent `n` of what survived filtering. `n <= 0` means no limit.
 - **Idempotency (optional capability):** Idempotency is not a base `Store` requirement. It is an optional extension interface: `chronica.IdempotentStore`. A store that implements it exposes `RecordIdempotent(ctx, actum, key)`, which deduplicates on key within a chronicum — stored actum wins, new payload is discarded. `Chronicarius` detects the capability via type assertion; if `WithIdempotencyKey` is passed to a store that does not implement `IdempotentStore`, `RecordActum` returns `ErrIdempotencyUnsupported`. The `inmemory` backend implements both `Store` and `IdempotentStore`. The conformance suite has two entry points: `storeconformance.RunTest` for the base suite and `storeconformance.RunIdempotentTest` for the idempotency suite.
 - **Atomicity (within IdempotentStore):** `RecordIdempotent` implementations must serialize concurrent calls on the same chronicum so the deduplication lookup and append are atomic. The in-memory store does this with a per-session mutex.

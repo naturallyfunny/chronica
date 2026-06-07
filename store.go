@@ -81,13 +81,8 @@ type Actum struct {
 	// At is an advisory wall-clock timestamp set by the Store at insert time.
 	// Caller-supplied At is ignored. At MUST NOT be used to determine ordering;
 	// the order of acta returned by Acta is the order in which Record was called
-	// (insertion order). To record the real-world event time, use OccurredAt.
+	// (insertion order).
 	At time.Time
-
-	// OccurredAt is an optional advisory field set by the caller to record when
-	// the event happened in the real world. It does not affect ordering.
-	// Zero means "not provided".
-	OccurredAt time.Time
 }
 
 // Validate reports whether the actum is well-formed for recording.

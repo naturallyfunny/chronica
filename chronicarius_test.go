@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"testing"
-	"time"
 
 	"go.naturallyfunny.dev/chronica"
 	"go.naturallyfunny.dev/chronica/inmemory"
@@ -283,21 +282,15 @@ func TestChronicarius_Idempotency(t *testing.T) {
 	store := inmemory.NewStore()
 	c := chronica.NewChronicarius(store)
 
-	occTime := time.Now().Add(-10 * time.Minute)
 	stored, err := c.RecordActum(ctx, "owner-1", chronica.Actum{
 		ChronicumID: "session-1",
 		Kind:        chronica.ActumMessage,
 		ActorKind:   chronica.ActorHuman,
 		Actor:       "user-1",
 		Content:     "hello",
-		OccurredAt:  occTime,
 	}, chronica.WithIdempotencyKey("idem-key-1"))
 	if err != nil {
 		t.Fatalf("RecordActum: %v", err)
-	}
-
-	if !stored.OccurredAt.Equal(occTime) {
-		t.Errorf("want OccurredAt %v, got %v", occTime, stored.OccurredAt)
 	}
 
 	// Retry with same idempotency key — stored wins, new payload discarded.
@@ -307,7 +300,6 @@ func TestChronicarius_Idempotency(t *testing.T) {
 		ActorKind:   chronica.ActorHuman,
 		Actor:       "user-1",
 		Content:     "new content but same idempotency key",
-		OccurredAt:  occTime,
 	}, chronica.WithIdempotencyKey("idem-key-1"))
 	if err != nil {
 		t.Fatalf("RecordActum retry: %v", err)

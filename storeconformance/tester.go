@@ -304,7 +304,6 @@ func testAppendReturnsFullActum(t *testing.T, store chronica.Store) {
 	ctx := context.Background()
 	store.Create(ctx, chronica.Chronicum{ID: "cid", OwnerID: "owner"})
 
-	occurredAt := time.Now().Add(-time.Minute)
 	a := chronica.Actum{
 		ID:          "test-id-1",
 		ChronicumID: "cid",
@@ -312,7 +311,6 @@ func testAppendReturnsFullActum(t *testing.T, store chronica.Store) {
 		ActorKind:   chronica.ActorHuman,
 		Actor:       "test-user",
 		Content:     "hello",
-		OccurredAt:  occurredAt,
 	}
 	stored, err := store.Record(ctx, a)
 	if err != nil {
@@ -323,9 +321,6 @@ func testAppendReturnsFullActum(t *testing.T, store chronica.Store) {
 	}
 	if stored.At.IsZero() {
 		t.Error("At is zero — Store MUST set At")
-	}
-	if !stored.OccurredAt.Equal(occurredAt) {
-		t.Errorf("OccurredAt: want %v, got %v", occurredAt, stored.OccurredAt)
 	}
 	if stored.ChronicumID != a.ChronicumID {
 		t.Errorf("ChronicumID: want %s, got %s", a.ChronicumID, stored.ChronicumID)
