@@ -47,6 +47,23 @@ func defaultID() string {
 	return hex.EncodeToString(b[:])
 }
 
+// RecordOption configures a single RecordActum call.
+type RecordOption func(*recordOptions)
+
+type recordOptions struct {
+	idempotencyKey string
+}
+
+// WithIdempotencyKey makes the RecordActum call retry-safe.
+// If the backing Store implements IdempotentStore, a repeat call with the
+// same key in the same chronicum returns the previously stored Actum without
+// writing a duplicate — stored wins, new payload is discarded.
+// If the Store does not implement IdempotentStore, RecordActum returns
+// ErrIdempotencyUnsupported.
+func WithIdempotencyKey(key string) RecordOption {
+	return func(o *recordOptions) { o.idempotencyKey = key }
+}
+
 // RecordActum records an action within a chronicum.
 //
 // CONTRACT:
@@ -54,19 +71,36 @@ func defaultID() string {
 //   - actum.Validate() is called before touching the store.
 //   - actum.ID is always replaced with a server-assigned value.
 //   - If actum.ChronicumID does not exist, it is created and bound to ownerID.
+//     A failure after auto-create may leave an empty chronicum; retries are safe.
 //   - If it exists under a different owner, ErrChronicumNotFound is returned
 //     without writing. The caller cannot tell whether the session belongs to
 //     another owner.
-//   - If actum.IdempotencyKey is non-empty and was used before in the same
-//     chronicum, the previously stored Actum is returned without writing a
-//     duplicate — the stored actum wins, new payload is discarded.
+//   - If WithIdempotencyKey is supplied and the store implements IdempotentStore,
+//     a repeat call with the same key returns the stored Actum without writing
+//     a duplicate. If the store does not implement IdempotentStore,
+//     ErrIdempotencyUnsupported is returned.
 //   - On success, returns the fully-populated stored Actum.
-func (c *Chronicarius) RecordActum(ctx context.Context, ownerID string, actum Actum) (Actum, error) {
+func (c *Chronicarius) RecordActum(ctx context.Context, ownerID string, actum Actum, opts ...RecordOption) (Actum, error) {
 	if ownerID == "" {
 		return Actum{}, ErrEmptyOwnerID
 	}
 	if err := actum.Validate(); err != nil {
 		return Actum{}, err
+	}
+
+	var o recordOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+
+	// Fail fast before any side effect: if a key is requested but the store
+	// doesn't support idempotency, there is no point creating a chronicum.
+	var is IdempotentStore
+	if o.idempotencyKey != "" {
+		var ok bool
+		if is, ok = c.store.(IdempotentStore); !ok {
+			return Actum{}, ErrIdempotencyUnsupported
+		}
 	}
 
 	_, err := c.ownerGuard(ctx, ownerID, actum.ChronicumID)
@@ -90,6 +124,10 @@ func (c *Chronicarius) RecordActum(ctx context.Context, ownerID string, actum Ac
 	}
 
 	actum.ID = c.idGen()
+
+	if is != nil {
+		return is.RecordIdempotent(ctx, actum, o.idempotencyKey)
+	}
 	return c.store.Record(ctx, actum)
 }
 
@@ -122,9 +160,6 @@ func (c *Chronicarius) GetActa(ctx context.Context, ownerID, chronicumID string,
 //   - If the chronicum does not exist or is not owned by ownerID, returns
 //     ErrChronicumNotFound. The two cases are indistinguishable.
 func (c *Chronicarius) GetChronicum(ctx context.Context, ownerID, chronicumID string) (Chronicum, error) {
-	if err := ctx.Err(); err != nil {
-		return Chronicum{}, err
-	}
 	if ownerID == "" {
 		return Chronicum{}, ErrEmptyOwnerID
 	}

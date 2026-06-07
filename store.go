@@ -25,6 +25,11 @@ var (
 
 	// ErrEmptyOwnerID is returned when a required ownerID argument is empty.
 	ErrEmptyOwnerID = errors.New("chronica: empty owner id")
+
+	// ErrIdempotencyUnsupported is returned by RecordActum when an
+	// idempotency key is supplied but the backing Store does not implement
+	// IdempotentStore.
+	ErrIdempotencyUnsupported = errors.New("chronica: store does not support idempotency")
 )
 
 // ActorKind represents the type of participant in a conversation.
@@ -74,24 +79,15 @@ type Actum struct {
 	Content string
 
 	// At is an advisory wall-clock timestamp set by the Store at insert time.
-	// Caller-supplied At is ignored. The insertion order of acta returned by
-	// Acta is determined by a monotonic per-chronicum sequence maintained by
-	// the Store, not by At. To record the real-world event time, use OccurredAt.
+	// Caller-supplied At is ignored. At MUST NOT be used to determine ordering;
+	// the order of acta returned by Acta is the order in which Record was called
+	// (insertion order). To record the real-world event time, use OccurredAt.
 	At time.Time
 
 	// OccurredAt is an optional advisory field set by the caller to record when
 	// the event happened in the real world. It does not affect ordering.
 	// Zero means "not provided".
 	OccurredAt time.Time
-
-	// IdempotencyKey is an optional caller-supplied deduplication key scoped to
-	// the chronicum. If non-empty and a previous Record call in the same
-	// chronicum used the same key, the previously stored Actum is returned
-	// without writing a duplicate — the stored actum wins and the new payload is
-	// discarded. This makes retries safe.
-	//
-	// IdempotencyKey is persisted and returned in the stored Actum.
-	IdempotencyKey string
 }
 
 // Validate reports whether the actum is well-formed for recording.
@@ -137,27 +133,22 @@ type ActaQuery struct {
 	ActorKinds []ActorKind
 }
 
-// Store is the persistence and transaction boundary for Chronicarius.
-// Each method is one atomic unit of work.
-//
-// Implementations MUST serialize concurrent Record calls on the same chronicum
-// (e.g. SELECT … FOR UPDATE on the chronicum row, or serializable isolation)
-// so that idempotency lookup and LastActivityAt bump are atomic.
+// Store is the persistence boundary for Chronicarius. It is intentionally
+// primitive: each method is one atomic unit of work and carries no SDK policy.
+// All SDK rules — ownership, validation, ID assignment, idempotency, ordering —
+// are enforced by Chronicarius above the Store.
 type Store interface {
 	// Create persists a new chronicum.
 	// Returns ErrChronicumExists if a session with the same ID already exists.
 	Create(ctx context.Context, c Chronicum) error
 
-	// Record persists a into the chronicum identified by a.ChronicumID, in one
-	// transaction:
-	//   - if a.IdempotencyKey != "" and the same key was used before in this
-	//     chronicum → return the previously stored Actum, discard new payload;
-	//   - assign a monotonic per-chronicum sequence (recommended) and set a.At
-	//     to the current wall-clock time;
-	//   - set the chronicum's LastActivityAt to stored.At;
-	//   - return the fully-populated stored Actum.
+	// Record appends a to the chronicum identified by a.ChronicumID, sets a.At
+	// to the current wall-clock time, bumps the chronicum's LastActivityAt, and
+	// returns the fully-populated stored Actum.
 	//
 	// a.ID is already assigned and a is already validated by Chronicarius.
+	//
+	// Returns ErrChronicumNotFound if a.ChronicumID does not exist.
 	//
 	// OWNERSHIP BOUNDARY: Record takes no ownerID and performs no ownership
 	// check. Tenant isolation on the write path is enforced by Chronicarius
@@ -165,8 +156,8 @@ type Store interface {
 	// without that guard; doing so can write across tenants.
 	Record(ctx context.Context, a Actum) (Actum, error)
 
-	// Acta returns acta for chronicumID, in insertion order
-	// (oldest first). q.Kinds and q.ActorKinds filters first; q.LastN limits after filtering
+	// Acta returns acta for chronicumID in insertion order (oldest first).
+	// q.Kinds and q.ActorKinds filter first; q.LastN limits after filtering
 	// (filter-then-limit). Zero values mean "no filter / no limit".
 	//
 	// OWNERSHIP BOUNDARY: Acta takes no ownerID and performs no ownership
@@ -182,4 +173,20 @@ type Store interface {
 	// check. Tenant isolation is enforced by Chronicarius before returning
 	// this to the client.
 	Get(ctx context.Context, chronicumID string) (Chronicum, error)
+}
+
+// IdempotentStore is an optional capability a Store MAY implement to make
+// RecordActum retry-safe via a caller-supplied key. Chronicarius detects it
+// by type assertion; stores that don't implement it simply don't offer
+// idempotency, and RecordActum will return ErrIdempotencyUnsupported if a key
+// is supplied to such a store.
+type IdempotentStore interface {
+	Store
+	// RecordIdempotent records a, deduplicating on key within a.ChronicumID.
+	// If a previous call in the same chronicum used the same key, the stored
+	// Actum is returned and the new payload is discarded — stored wins.
+	// Concurrent calls with the same key store exactly one actum.
+	//
+	// Returns ErrChronicumNotFound if a.ChronicumID does not exist.
+	RecordIdempotent(ctx context.Context, a Actum, key string) (Actum, error)
 }

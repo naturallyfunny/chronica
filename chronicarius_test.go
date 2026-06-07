@@ -243,21 +243,20 @@ func TestChronicarius_GetChronicum_Validation(t *testing.T) {
 	}
 }
 
-func TestChronicarius_Validate_OccurredAtAndIdempotency(t *testing.T) {
+func TestChronicarius_Idempotency(t *testing.T) {
 	ctx := context.Background()
 	store := inmemory.NewStore()
 	c := chronica.NewChronicarius(store)
 
 	occTime := time.Now().Add(-10 * time.Minute)
 	stored, err := c.RecordActum(ctx, "owner-1", chronica.Actum{
-		ChronicumID:    "session-1",
-		Kind:           chronica.ActumMessage,
-		ActorKind:      chronica.ActorHuman,
-		Actor:          "user-1",
-		Content:        "hello",
-		OccurredAt:     occTime,
-		IdempotencyKey: "idem-key-1",
-	})
+		ChronicumID: "session-1",
+		Kind:        chronica.ActumMessage,
+		ActorKind:   chronica.ActorHuman,
+		Actor:       "user-1",
+		Content:     "hello",
+		OccurredAt:  occTime,
+	}, chronica.WithIdempotencyKey("idem-key-1"))
 	if err != nil {
 		t.Fatalf("RecordActum: %v", err)
 	}
@@ -265,20 +264,16 @@ func TestChronicarius_Validate_OccurredAtAndIdempotency(t *testing.T) {
 	if !stored.OccurredAt.Equal(occTime) {
 		t.Errorf("want OccurredAt %v, got %v", occTime, stored.OccurredAt)
 	}
-	if stored.IdempotencyKey != "idem-key-1" {
-		t.Errorf("want IdempotencyKey 'idem-key-1', got %q", stored.IdempotencyKey)
-	}
 
-	// Retry with same idempotency key
+	// Retry with same idempotency key — stored wins, new payload discarded.
 	stored2, err := c.RecordActum(ctx, "owner-1", chronica.Actum{
-		ChronicumID:    "session-1",
-		Kind:           chronica.ActumMessage,
-		ActorKind:      chronica.ActorHuman,
-		Actor:          "user-1",
-		Content:        "new content but same idempotency key",
-		OccurredAt:     occTime,
-		IdempotencyKey: "idem-key-1",
-	})
+		ChronicumID: "session-1",
+		Kind:        chronica.ActumMessage,
+		ActorKind:   chronica.ActorHuman,
+		Actor:       "user-1",
+		Content:     "new content but same idempotency key",
+		OccurredAt:  occTime,
+	}, chronica.WithIdempotencyKey("idem-key-1"))
 	if err != nil {
 		t.Fatalf("RecordActum retry: %v", err)
 	}
@@ -288,6 +283,48 @@ func TestChronicarius_Validate_OccurredAtAndIdempotency(t *testing.T) {
 	}
 	if stored2.Content != "hello" {
 		t.Errorf("idempotency failed to return original content: got %q", stored2.Content)
+	}
+}
+
+// baseOnlyStore is a minimal Store that does NOT implement IdempotentStore.
+// Used to verify that WithIdempotencyKey returns ErrIdempotencyUnsupported.
+type baseOnlyStore struct {
+	inner chronica.Store
+}
+
+func (b *baseOnlyStore) Create(ctx context.Context, c chronica.Chronicum) error {
+	return b.inner.Create(ctx, c)
+}
+func (b *baseOnlyStore) Record(ctx context.Context, a chronica.Actum) (chronica.Actum, error) {
+	return b.inner.Record(ctx, a)
+}
+func (b *baseOnlyStore) Acta(ctx context.Context, id string, q chronica.ActaQuery) ([]chronica.Actum, error) {
+	return b.inner.Acta(ctx, id, q)
+}
+func (b *baseOnlyStore) Get(ctx context.Context, id string) (chronica.Chronicum, error) {
+	return b.inner.Get(ctx, id)
+}
+
+func TestChronicarius_RecordActum_IdempotencyUnsupported(t *testing.T) {
+	ctx := context.Background()
+	store := &baseOnlyStore{inner: inmemory.NewStore()}
+	c := chronica.NewChronicarius(store)
+
+	_, err := c.RecordActum(ctx, "owner-1", chronica.Actum{
+		ChronicumID: "session-new", // does not exist yet
+		Kind:        chronica.ActumMessage,
+		ActorKind:   chronica.ActorHuman,
+		Actor:       "user-1",
+		Content:     "hello",
+	}, chronica.WithIdempotencyKey("key-1"))
+	if !errors.Is(err, chronica.ErrIdempotencyUnsupported) {
+		t.Errorf("want ErrIdempotencyUnsupported, got %v", err)
+	}
+
+	// No orphan chronicum must have been created as a side effect.
+	_, err = c.GetChronicum(ctx, "owner-1", "session-new")
+	if !errors.Is(err, chronica.ErrChronicumNotFound) {
+		t.Errorf("want ErrChronicumNotFound (no orphan), got %v", err)
 	}
 }
 

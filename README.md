@@ -29,6 +29,21 @@ Chronica treats AI conversations not just as text messages, but as a stream of *
 
 > **Note on Naming:** `Chronica` and `Acta` are simply the Latin plural forms of `Chronicum` and `Actum`. You will see these used throughout the SDK's package name and slice returns (e.g., `[]Actum` is referred to as Acta).
 
+## Design Scope
+
+Chronica is built for the **AI agent layer** — not for general CRUD apps and not for UI. That focus is why the API deliberately omits things you might expect from a generic data store:
+
+- **No delete.** A session is an append-only record of what an agent and its humans did. Nothing in the agent layer needs to erase a recorded action, so there is no `Delete`.
+- **No pagination cursors.** Cursors exist to drive UI lists (infinite scroll, page navigation). Agents assemble context windows, so Chronica gives you `WithLastN` plus kind/actor filters instead.
+
+If you find yourself reaching for delete or pagination, you are building a UI/CRUD layer *on top of* Chronica — keep that concern there, not in here.
+
+## Architecture: Smart Chronicarius, Dumb Store
+
+`Chronicarius` owns the core SDK rules — tenant/ownership isolation, validation, ID assignment, and find-or-create orchestration. The `Store` is a primitive repository that persists and returns rows; **ordering** is an observable contract of the `Store` itself (insertion order), and **idempotency** is an optional capability a `Store` may advertise by also implementing `IdempotentStore`. `Chronicarius` orchestrates both — routing to `RecordIdempotent` when a key is supplied and failing loudly (`ErrIdempotencyUnsupported`) if the store doesn't support it — but the deduplication logic lives in the store.
+
+The contract between them is **pure methods — parameters and return values, that's it.** A `Store` is never asked to "please implement this behavior correctly," because relying on each backend to re-implement an SDK rule is just hoping every author gets it right. A straightforward, naive-but-correct CRUD implementation of the four `Store` methods is automatically a correct base backend; adding `RecordIdempotent` opts into the idempotency suite.
+
 ## Installation
 
 ```bash
@@ -50,26 +65,29 @@ import (
 c := chronica.NewChronicarius(inmemory.NewStore())
 ```
 
-To use a real backend (e.g. Postgres, MongoDB), implement the four-method `chronica.Store` interface and pass it to `chronica.NewChronicarius`. Your backend can be verified against the conformance suite using `storeconformance.Run`.
+To use a real backend (e.g. Postgres, MongoDB), implement the four-method `chronica.Store` interface and pass it to `chronica.NewChronicarius`. Verify it with `storeconformance.Run`. If your backend also implements `chronica.IdempotentStore` (i.e. supports `WithIdempotencyKey`), verify that too with `storeconformance.RunIdempotent`.
 
 ### 1. Recording an Action (RecordActum)
 
 `RecordActum` records an action in a chronicum. If the `ChronicumID` does not exist, the orchestrator auto-creates it and binds it to `ownerID`. On success it returns the fully-populated `Actum` with server-assigned `ID` and `At`.
 
-Supply an `IdempotencyKey` to make retries safe: a repeated call with the same key returns the previously stored `Actum` without writing a duplicate.
+Pass `chronica.WithIdempotencyKey(key)` to make retries safe: a repeated call with the same key returns the previously stored `Actum` without writing a duplicate — stored wins, new payload is discarded. Idempotency is an optional capability: it requires the backing `Store` to implement `chronica.IdempotentStore`. If it does not, `RecordActum` returns `ErrIdempotencyUnsupported` rather than silently ignoring the key.
 
 ```go
 // Example: An AI agent replying to a user
 actum := chronica.Actum{
-    ChronicumID:    "session-123",
-    Kind:           chronica.ActumMessage,
-    ActorKind:      chronica.ActorAgent,
-    Actor:          "agent-abc-456", // Use a stable ID; display names belong in a higher layer
-    Content:        "Hello, how can I help you today?",
-    IdempotencyKey: "req-uuid-xyz",  // optional; makes the call retry-safe
+    ChronicumID: "session-123",
+    Kind:        chronica.ActumMessage,
+    ActorKind:   chronica.ActorAgent,
+    Actor:       "agent-abc-456", // Use a stable ID; display names belong in a higher layer
+    Content:     "Hello, how can I help you today?",
 }
 
+// Without idempotency:
 stored, err := c.RecordActum(ctx, "user-999", actum)
+
+// With idempotency (store must implement IdempotentStore, e.g. inmemory):
+stored, err = c.RecordActum(ctx, "user-999", actum, chronica.WithIdempotencyKey("req-uuid-xyz"))
 ```
 
 ### 2. Retrieving Context for AI (GetActa)
@@ -91,5 +109,5 @@ acta, err := c.GetActa(ctx, "user-999", "session-123",
 Retrieve metadata for a single session by ID.
 
 ```go
-session, err := c.GetChronicum(ctx, "session-123")
+session, err := c.GetChronicum(ctx, "user-999", "session-123")
 ```

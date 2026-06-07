@@ -1,7 +1,8 @@
 // Package inmemory provides a thread-safe in-memory implementation of
-// chronica.Store. It is intended for use in examples, tests, and development.
-// It is not suitable for production deployments where data must survive process
-// restarts or be shared across replicas.
+// chronica.Store and chronica.IdempotentStore. It is intended for use in
+// examples, tests, and development. It is not suitable for production
+// deployments where data must survive process restarts or be shared across
+// replicas.
 package inmemory
 
 import (
@@ -15,6 +16,16 @@ import (
 // NewStore returns a new, empty in-memory Store.
 // The returned store is safe for concurrent use.
 func NewStore() chronica.Store {
+	return newStore()
+}
+
+// NewIdempotentStore returns a new, empty store that implements both
+// chronica.Store and chronica.IdempotentStore.
+func NewIdempotentStore() chronica.IdempotentStore {
+	return newStore()
+}
+
+func newStore() *store {
 	return &store{sessions: make(map[string]*session)}
 }
 
@@ -42,43 +53,56 @@ func (s *store) Create(ctx context.Context, c chronica.Chronicum) error {
 	now := time.Now()
 	c.StartedAt = now
 	c.LastActivityAt = now
-	s.sessions[c.ID] = &session{
-		c:         c,
-		idempKeys: make(map[string]chronica.Actum),
-	}
+	s.sessions[c.ID] = &session{c: c}
 	return nil
 }
 
 // Record implements chronica.Store.
-// Each chronicum's mutex serializes concurrent calls, mirroring the
-// SELECT … FOR UPDATE semantics required of persistent backends.
+// Appends the actum, sets At, bumps LastActivityAt, and returns the stored Actum.
 func (s *store) Record(ctx context.Context, a chronica.Actum) (chronica.Actum, error) {
 	s.mu.Lock()
 	sess, ok := s.sessions[a.ChronicumID]
 	s.mu.Unlock()
 
 	if !ok {
-		// Should not happen when reached via Chronicarius.RecordActum,
-		// but we protect against it anyway.
 		return chronica.Actum{}, chronica.ErrChronicumNotFound
 	}
 
 	sess.mu.Lock()
 	defer sess.mu.Unlock()
 
-	if a.IdempotencyKey != "" {
-		if prev, hit := sess.idempKeys[a.IdempotencyKey]; hit {
-			return prev, nil
-		}
+	a.At = time.Now()
+	sess.c.LastActivityAt = a.At
+	sess.acta = append(sess.acta, a)
+	return a, nil
+}
+
+// RecordIdempotent implements chronica.IdempotentStore.
+// Each chronicum's mutex serializes concurrent calls so the deduplication
+// lookup and append are atomic.
+func (s *store) RecordIdempotent(ctx context.Context, a chronica.Actum, key string) (chronica.Actum, error) {
+	s.mu.Lock()
+	sess, ok := s.sessions[a.ChronicumID]
+	s.mu.Unlock()
+
+	if !ok {
+		return chronica.Actum{}, chronica.ErrChronicumNotFound
+	}
+
+	sess.mu.Lock()
+	defer sess.mu.Unlock()
+
+	if sess.idempKeys == nil {
+		sess.idempKeys = make(map[string]chronica.Actum)
+	}
+	if prev, hit := sess.idempKeys[key]; hit {
+		return prev, nil
 	}
 
 	a.At = time.Now()
 	sess.c.LastActivityAt = a.At
 	sess.acta = append(sess.acta, a)
-	if a.IdempotencyKey != "" {
-		sess.idempKeys[a.IdempotencyKey] = a
-	}
-
+	sess.idempKeys[key] = a
 	return a, nil
 }
 

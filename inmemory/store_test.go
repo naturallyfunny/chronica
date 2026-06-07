@@ -9,4 +9,5 @@ import (
 
 func TestConformance(t *testing.T) {
 	storeconformance.Run(t, inmemory.NewStore)
+	storeconformance.RunIdempotent(t, inmemory.NewIdempotentStore)
 }

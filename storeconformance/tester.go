@@ -1,5 +1,6 @@
 // Package storeconformance provides a conformance test suite for chronica.Store
-// implementations. Each backend calls Run from its own test file.
+// implementations. Each backend calls Run (and optionally RunIdempotent) from
+// its own test file.
 //
 // Usage:
 //
@@ -7,11 +8,16 @@
 //	    storeconformance.Run(t, func() chronica.Store {
 //	        return newMyBackend(t)
 //	    })
+//	    // if the backend also implements IdempotentStore:
+//	    storeconformance.RunIdempotent(t, func() chronica.IdempotentStore {
+//	        return newMyIdempotentBackend(t)
+//	    })
 //	}
 package storeconformance
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -20,7 +26,7 @@ import (
 	"go.naturallyfunny.dev/chronica"
 )
 
-// Run runs the full Store conformance suite.
+// Run runs the base Store conformance suite.
 // newStore is called once per sub-test and MUST return a fresh, empty store.
 func Run(t *testing.T, newStore func() chronica.Store) {
 	t.Helper()
@@ -28,15 +34,37 @@ func Run(t *testing.T, newStore func() chronica.Store) {
 		name string
 		fn   func(*testing.T, chronica.Store)
 	}{
-		{"CrossOwnerIsolation", testCrossOwnerIsolation},
-		{"Idempotency", testIdempotency},
-		{"IdempotencyStoredWins", testIdempotencyStoredWins},
+		{"GetReturnsStoredOwner", testGetReturnsStoredOwner},
+		{"CreateExists", testCreateExists},
+		{"GetMissing", testGetMissing},
+		{"RecordIntoMissing", testRecordIntoMissing},
 		{"FilterThenLimit", testFilterThenLimit},
 		{"FilterActorKinds", testFilterActorKinds},
 		{"LastActivityAtBumps", testLastActivityAtBumps},
 		{"AppendReturnsFullActum", testAppendReturnsFullActum},
 		{"InsertionOrder", testInsertionOrder},
 		{"ConcurrentAppend", testConcurrentAppend},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tc.fn(t, newStore())
+		})
+	}
+}
+
+// RunIdempotent runs the IdempotentStore conformance suite.
+// newStore is called once per sub-test and MUST return a fresh, empty store.
+func RunIdempotent(t *testing.T, newStore func() chronica.IdempotentStore) {
+	t.Helper()
+	cases := []struct {
+		name string
+		fn   func(*testing.T, chronica.IdempotentStore)
+	}{
+		{"Idempotency", testIdempotency},
+		{"IdempotencyStoredWins", testIdempotencyStoredWins},
+		{"ConcurrentSameKey", testConcurrentSameKey},
 	}
 	for _, tc := range cases {
 		tc := tc
@@ -59,7 +87,7 @@ func makeActum(id, chronicumID, content string) chronica.Actum {
 	}
 }
 
-func testCrossOwnerIsolation(t *testing.T, store chronica.Store) {
+func testGetReturnsStoredOwner(t *testing.T, store chronica.Store) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -81,62 +109,36 @@ func testCrossOwnerIsolation(t *testing.T, store chronica.Store) {
 	}
 }
 
-func testIdempotency(t *testing.T, store chronica.Store) {
+func testCreateExists(t *testing.T, store chronica.Store) {
 	t.Helper()
 	ctx := context.Background()
-	store.Create(ctx, chronica.Chronicum{ID: "cid", OwnerID: "owner"})
 
-	a := makeActum("id-1", "cid", "hello")
-	a.IdempotencyKey = "key-1"
-
-	first, err := store.Record(ctx, a)
-	if err != nil {
-		t.Fatalf("first Record: %v", err)
+	if err := store.Create(ctx, chronica.Chronicum{ID: "dup", OwnerID: "owner"}); err != nil {
+		t.Fatalf("first Create: %v", err)
 	}
-
-	second, err := store.Record(ctx, a)
-	if err != nil {
-		t.Fatalf("idempotent retry: %v", err)
-	}
-	if second.ID != first.ID {
-		t.Errorf("ID: want %s, got %s", first.ID, second.ID)
-	}
-	if !second.At.Equal(first.At) {
-		t.Errorf("At: want %v, got %v", first.At, second.At)
-	}
-
-	acta, err := store.Acta(ctx, "cid", chronica.ActaQuery{})
-	if err != nil {
-		t.Fatalf("Acta: %v", err)
-	}
-	if len(acta) != 1 {
-		t.Errorf("want 1 actum after idempotent write, got %d", len(acta))
+	err := store.Create(ctx, chronica.Chronicum{ID: "dup", OwnerID: "owner"})
+	if !errors.Is(err, chronica.ErrChronicumExists) {
+		t.Errorf("duplicate Create: want ErrChronicumExists, got %v", err)
 	}
 }
 
-func testIdempotencyStoredWins(t *testing.T, store chronica.Store) {
+func testGetMissing(t *testing.T, store chronica.Store) {
 	t.Helper()
 	ctx := context.Background()
-	store.Create(ctx, chronica.Chronicum{ID: "cid", OwnerID: "owner"})
 
-	a := makeActum("id-1", "cid", "original content")
-	a.IdempotencyKey = "key-1"
-	first, err := store.Record(ctx, a)
-	if err != nil {
-		t.Fatalf("first Record: %v", err)
+	_, err := store.Get(ctx, "does-not-exist")
+	if !errors.Is(err, chronica.ErrChronicumNotFound) {
+		t.Errorf("Get missing: want ErrChronicumNotFound, got %v", err)
 	}
+}
 
-	a2 := makeActum("id-2", "cid", "new content — should be discarded")
-	a2.IdempotencyKey = "key-1"
-	second, err := store.Record(ctx, a2)
-	if err != nil {
-		t.Fatalf("second Record: %v", err)
-	}
-	if second.Content != first.Content {
-		t.Errorf("stored wins: want %q, got %q", first.Content, second.Content)
-	}
-	if second.ID != first.ID {
-		t.Errorf("stored wins ID: want %s, got %s", first.ID, second.ID)
+func testRecordIntoMissing(t *testing.T, store chronica.Store) {
+	t.Helper()
+	ctx := context.Background()
+
+	_, err := store.Record(ctx, makeActum("id-1", "does-not-exist", "hello"))
+	if !errors.Is(err, chronica.ErrChronicumNotFound) {
+		t.Errorf("Record into missing chronicum: want ErrChronicumNotFound, got %v", err)
 	}
 }
 
@@ -294,14 +296,13 @@ func testAppendReturnsFullActum(t *testing.T, store chronica.Store) {
 
 	occurredAt := time.Now().Add(-time.Minute)
 	a := chronica.Actum{
-		ID:             "test-id-1",
-		ChronicumID:    "cid",
-		Kind:           chronica.ActumMessage,
-		ActorKind:      chronica.ActorHuman,
-		Actor:          "test-user",
-		Content:        "hello",
-		OccurredAt:     occurredAt,
-		IdempotencyKey: "idem-1",
+		ID:          "test-id-1",
+		ChronicumID: "cid",
+		Kind:        chronica.ActumMessage,
+		ActorKind:   chronica.ActorHuman,
+		Actor:       "test-user",
+		Content:     "hello",
+		OccurredAt:  occurredAt,
 	}
 	stored, err := store.Record(ctx, a)
 	if err != nil {
@@ -316,9 +317,6 @@ func testAppendReturnsFullActum(t *testing.T, store chronica.Store) {
 	if !stored.OccurredAt.Equal(occurredAt) {
 		t.Errorf("OccurredAt: want %v, got %v", occurredAt, stored.OccurredAt)
 	}
-	if stored.IdempotencyKey != a.IdempotencyKey {
-		t.Errorf("IdempotencyKey: want %s, got %s", a.IdempotencyKey, stored.IdempotencyKey)
-	}
 	if stored.ChronicumID != a.ChronicumID {
 		t.Errorf("ChronicumID: want %s, got %s", a.ChronicumID, stored.ChronicumID)
 	}
@@ -329,7 +327,7 @@ func testInsertionOrder(t *testing.T, store chronica.Store) {
 	ctx := context.Background()
 	store.Create(ctx, chronica.Chronicum{ID: "cid", OwnerID: "owner"})
 
-	const N = 10
+	const N = 1000
 	var insertedIDs []string
 	for i := 0; i < N; i++ {
 		stored, err := store.Record(ctx,
@@ -406,5 +404,117 @@ func testConcurrentAppend(t *testing.T, store chronica.Store) {
 			t.Errorf("duplicate ID %s in Acta result", a.ID)
 		}
 		seenIDs[a.ID] = true
+	}
+}
+
+// =============================================================================
+// IdempotentStore conformance tests
+// =============================================================================
+
+func testIdempotency(t *testing.T, store chronica.IdempotentStore) {
+	t.Helper()
+	ctx := context.Background()
+	store.Create(ctx, chronica.Chronicum{ID: "cid", OwnerID: "owner"})
+
+	a := makeActum("id-1", "cid", "hello")
+
+	first, err := store.RecordIdempotent(ctx, a, "key-1")
+	if err != nil {
+		t.Fatalf("first RecordIdempotent: %v", err)
+	}
+
+	second, err := store.RecordIdempotent(ctx, a, "key-1")
+	if err != nil {
+		t.Fatalf("idempotent retry: %v", err)
+	}
+	if second.ID != first.ID {
+		t.Errorf("ID: want %s, got %s", first.ID, second.ID)
+	}
+	if !second.At.Equal(first.At) {
+		t.Errorf("At: want %v, got %v", first.At, second.At)
+	}
+
+	acta, err := store.Acta(ctx, "cid", chronica.ActaQuery{})
+	if err != nil {
+		t.Fatalf("Acta: %v", err)
+	}
+	if len(acta) != 1 {
+		t.Errorf("want 1 actum after idempotent write, got %d", len(acta))
+	}
+}
+
+func testIdempotencyStoredWins(t *testing.T, store chronica.IdempotentStore) {
+	t.Helper()
+	ctx := context.Background()
+	store.Create(ctx, chronica.Chronicum{ID: "cid", OwnerID: "owner"})
+
+	a := makeActum("id-1", "cid", "original content")
+	first, err := store.RecordIdempotent(ctx, a, "key-1")
+	if err != nil {
+		t.Fatalf("first RecordIdempotent: %v", err)
+	}
+
+	a2 := makeActum("id-2", "cid", "new content — should be discarded")
+	second, err := store.RecordIdempotent(ctx, a2, "key-1")
+	if err != nil {
+		t.Fatalf("second RecordIdempotent: %v", err)
+	}
+	if second.Content != first.Content {
+		t.Errorf("stored wins: want %q, got %q", first.Content, second.Content)
+	}
+	if second.ID != first.ID {
+		t.Errorf("stored wins ID: want %s, got %s", first.ID, second.ID)
+	}
+}
+
+func testConcurrentSameKey(t *testing.T, store chronica.IdempotentStore) {
+	t.Helper()
+	ctx := context.Background()
+	store.Create(ctx, chronica.Chronicum{ID: "cid", OwnerID: "owner"})
+
+	const N = 40
+	const key = "shared-key"
+	type result struct {
+		a   chronica.Actum
+		err error
+	}
+	results := make(chan result, N)
+
+	for i := 0; i < N; i++ {
+		i := i
+		go func() {
+			a := makeActum(fmt.Sprintf("id-%d", i), "cid", fmt.Sprintf("content-%d", i))
+			stored, err := store.RecordIdempotent(ctx, a, key)
+			results <- result{stored, err}
+		}()
+	}
+
+	var firstID string
+	var firstAt time.Time
+	for i := 0; i < N; i++ {
+		r := <-results
+		if r.err != nil {
+			t.Errorf("goroutine RecordIdempotent: %v", r.err)
+			continue
+		}
+		if firstID == "" {
+			firstID = r.a.ID
+			firstAt = r.a.At
+		} else {
+			if r.a.ID != firstID {
+				t.Errorf("concurrent same key: want ID %s, got %s", firstID, r.a.ID)
+			}
+			if !r.a.At.Equal(firstAt) {
+				t.Errorf("concurrent same key: want At %v, got %v", firstAt, r.a.At)
+			}
+		}
+	}
+
+	acta, err := store.Acta(ctx, "cid", chronica.ActaQuery{})
+	if err != nil {
+		t.Fatalf("Acta: %v", err)
+	}
+	if len(acta) != 1 {
+		t.Errorf("concurrent same key: want exactly 1 actum stored, got %d", len(acta))
 	}
 }
