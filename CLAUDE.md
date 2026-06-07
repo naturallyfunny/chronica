@@ -46,8 +46,6 @@ The `Store` is meant to be a **primitive CRUD repository**, and the contract bet
 - **Idempotency** is an optional `Store` capability (`IdempotentStore`). Chronicarius orchestrates it (routing + fail-loud) but does not implement deduplication.
 - Prefer making the store primitive enough that the behavior is structural, not a request.
 
-The "Known divergence" that existed in older versions of this codebase (idempotency in base `Store`, mandatory serialization prose) has been resolved. The base `Store` is now a pure append repository; idempotency is an optional capability via the `IdempotentStore` extension interface (see below). There is no remaining known divergence.
-
 ### The ownership boundary (most important invariant)
 
 `Chronicarius` is the authorization boundary; the `Store` is **not**. The three `Store` read/write methods (`Record`, `Acta`, `Get`) take **no `ownerID`** and perform **no ownership check** — see the "OWNERSHIP BOUNDARY" comments in `store.go`. Tenant isolation is enforced exclusively by `Chronicarius.ownerGuard`, which fetches the chronicum via `Store.Get` and rejects it with `ErrChronicumNotFound` if `OwnerID` doesn't match. Calling a `Store` method directly bypasses this and can read/write across tenants.
@@ -69,3 +67,13 @@ These are the behaviors the conformance suite enforces:
 ### ID assignment
 
 `Actum.ID` is always overwritten server-side by `Chronicarius` before `Record`; any caller-supplied value is discarded. The generator is pluggable via `WithIDGen` (default: random 128-bit hex from `crypto/rand`); inject a deterministic one for tests. The generator MUST return globally unique values — collisions are not detected.
+
+## Slop Issues
+
+Things a new Claude session might flag as findings or "invariants worth noting" — they are not. They follow directly from the design and don't need to be surfaced.
+
+- **Store has no ownership logic.** This is the whole point of "Smart Core, Dumb Edges." If ownership lived in the Store, every implementor would have to get it right independently with no enforcement. Chronicarius is the single enforcement point by design. Not a finding.
+
+- **`ErrChronicumNotFound` covers "not found" and "wrong owner" as one error.** Obvious. You never tell a caller whether a resource exists but belongs to someone else — that leaks tenant existence. This is basic security hygiene, not a clever invariant.
+
+- **Idempotency is not an invariant.** It is an optional capability (`IdempotentStore`). Do not list it alongside invariants. A store that doesn't implement it is correct; it just doesn't support idempotency keys.
