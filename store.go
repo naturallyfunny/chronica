@@ -168,6 +168,11 @@ type Store interface {
 	// (filter-then-limit). Zero or negative q.LastN means no limit; empty
 	// filter slices mean no filter.
 	// Returns ErrChronicumNotFound if chronicumID does not exist.
+	// Note for backend authors: Chronicarius never calls Acta without first
+	// running ownerGuard (which calls Get), so this error is unreachable
+	// through the public API. The requirement exists so the Store interface
+	// is fully specified for direct callers; a SQL backend must add an
+	// explicit existence check rather than returning nil, nil on zero rows.
 	//
 	// OWNERSHIP BOUNDARY: Acta takes no ownerID and performs no ownership
 	// check. Tenant isolation on the read path is enforced by Chronicarius
