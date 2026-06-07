@@ -17,6 +17,11 @@ type Option func(*Chronicarius)
 // fn MUST return globally unique values. Collisions are not detected by
 // Chronicarius or the Store; a duplicate Actum.ID within a chronicum will
 // be stored as a distinct record.
+//
+// fn MUST be safe for concurrent use: Chronicarius calls it concurrently
+// from multiple RecordActum goroutines with no external synchronization.
+// The default (crypto/rand) and stateless generators satisfy this automatically;
+// stateful generators (e.g. monotonic counters) must protect their own state.
 func WithIDGen(fn func() string) Option {
 	return func(c *Chronicarius) { c.idGen = fn }
 }
@@ -194,7 +199,7 @@ func (c *Chronicarius) ownerGuard(ctx context.Context, ownerID, chronicumID stri
 // ActaOptions is the resolved configuration for a GetActa call.
 type ActaOptions struct {
 	// LastN bounds the result to the most recent N acta that satisfy Kinds and ActorKinds.
-	// Zero means no limit.
+	// Zero or negative means no limit.
 	LastN int
 	// Kinds restricts results to these kinds. Empty means all kinds.
 	Kinds []ActumKind
@@ -211,12 +216,9 @@ type ActaOption func(*ActaOptions)
 // are still returned in chronological order (Old → New).
 //
 // n <= 0 means no limit; negative values are treated identically to zero.
+// Multiple calls follow last-call-wins semantics, including resetting to no limit.
 func WithLastN(n int) ActaOption {
-	return func(o *ActaOptions) {
-		if n > 0 {
-			o.LastN = n
-		}
-	}
+	return func(o *ActaOptions) { o.LastN = n }
 }
 
 // WithActumKinds filters results to the specified Actum kinds only.

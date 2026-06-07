@@ -15,6 +15,10 @@ import (
 
 // NewStore returns a new, empty in-memory Store.
 // The returned store is safe for concurrent use.
+//
+// Note: the underlying concrete type also implements chronica.IdempotentStore,
+// so a Chronicarius built with NewStore will accept WithIdempotencyKey calls.
+// Use NewIdempotentStore when you need to declare or pass the wider interface type.
 func NewStore() chronica.Store {
 	return newStore()
 }

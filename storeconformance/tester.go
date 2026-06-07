@@ -38,6 +38,7 @@ func RunTest(t *testing.T, newStore func() chronica.Store) {
 		{"CreateExists", testCreateExists},
 		{"GetMissing", testGetMissing},
 		{"RecordIntoMissing", testRecordIntoMissing},
+		{"ActaMissingChronicum", testActaMissingChronicum},
 		{"FilterThenLimit", testFilterThenLimit},
 		{"FilterActorKinds", testFilterActorKinds},
 		{"LastActivityAtBumps", testLastActivityAtBumps},
@@ -138,6 +139,16 @@ func testRecordIntoMissing(t *testing.T, store chronica.Store) {
 	_, err := store.Record(ctx, makeActum("id-1", "does-not-exist", "hello"))
 	if !errors.Is(err, chronica.ErrChronicumNotFound) {
 		t.Errorf("Record into missing chronicum: want ErrChronicumNotFound, got %v", err)
+	}
+}
+
+func testActaMissingChronicum(t *testing.T, store chronica.Store) {
+	t.Helper()
+	ctx := context.Background()
+
+	_, err := store.Acta(ctx, "does-not-exist", chronica.ActaQuery{})
+	if !errors.Is(err, chronica.ErrChronicumNotFound) {
+		t.Errorf("Acta on missing chronicum: want ErrChronicumNotFound, got %v", err)
 	}
 }
 

@@ -132,7 +132,7 @@ func (a Actum) Validate() error {
 // ActaQuery holds the resolved filter/limit parameters for Store.Acta.
 type ActaQuery struct {
 	// LastN is the maximum number of acta to return after filtering.
-	// Zero means no limit.
+	// Zero or negative means no limit.
 	LastN int
 	// Kinds restricts results to these kinds. Empty means all kinds.
 	Kinds []ActumKind
@@ -165,7 +165,9 @@ type Store interface {
 
 	// Acta returns acta for chronicumID in insertion order (oldest first).
 	// q.Kinds and q.ActorKinds filter first; q.LastN limits after filtering
-	// (filter-then-limit). Zero values mean "no filter / no limit".
+	// (filter-then-limit). Zero or negative q.LastN means no limit; empty
+	// filter slices mean no filter.
+	// Returns ErrChronicumNotFound if chronicumID does not exist.
 	//
 	// OWNERSHIP BOUNDARY: Acta takes no ownerID and performs no ownership
 	// check. Tenant isolation on the read path is enforced by Chronicarius
