@@ -64,7 +64,8 @@ import (
     "go.naturallyfunny.dev/chronica/inmemory"
 )
 
-c := chronica.NewChronicarius(inmemory.NewStore())
+s := inmemory.NewStore()
+c := chronica.NewChronicarius(s)
 ```
 
 To use a real backend (e.g. Postgres, MongoDB), implement the four-method `chronica.Store` interface and pass it to `chronica.NewChronicarius`. Verify it with `storeconformance.RunTest`. If your backend also implements `chronica.IdempotentStore` (i.e. supports `WithIdempotencyKey`), verify that too with `storeconformance.RunIdempotentTest`.
