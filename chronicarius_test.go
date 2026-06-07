@@ -40,6 +40,41 @@ func TestChronicarius_RecordActum_Validation(t *testing.T) {
 	}
 }
 
+func TestActum_Validate_ContentPerKind(t *testing.T) {
+	base := func(kind chronica.ActumKind) chronica.Actum {
+		return chronica.Actum{
+			ChronicumID: "s",
+			Kind:        kind,
+			ActorKind:   chronica.ActorAgent,
+			Actor:       "agent-1",
+		}
+	}
+
+	// message and thought require non-empty content
+	for _, kind := range []chronica.ActumKind{chronica.ActumMessage, chronica.ActumThought} {
+		a := base(kind)
+		if err := a.Validate(); !errors.Is(err, chronica.ErrInvalidActum) {
+			t.Errorf("kind %s with empty content: want ErrInvalidActum, got %v", kind, err)
+		}
+		a.Content = "x"
+		if err := a.Validate(); err != nil {
+			t.Errorf("kind %s with non-empty content: want nil, got %v", kind, err)
+		}
+	}
+
+	// tool_request and tool_response allow empty content
+	for _, kind := range []chronica.ActumKind{chronica.ActumToolRequest, chronica.ActumToolResponse} {
+		a := base(kind)
+		if err := a.Validate(); err != nil {
+			t.Errorf("kind %s with empty content: want nil, got %v", kind, err)
+		}
+		a.Content = "x"
+		if err := a.Validate(); err != nil {
+			t.Errorf("kind %s with non-empty content: want nil, got %v", kind, err)
+		}
+	}
+}
+
 func TestChronicarius_RecordActum_AutoCreateAndOwnership(t *testing.T) {
 	ctx := context.Background()
 	store := inmemory.NewStore()

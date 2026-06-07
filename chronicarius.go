@@ -39,6 +39,10 @@ func NewChronicarius(store Store, opts ...Option) *Chronicarius {
 	return c
 }
 
+// defaultID generates a random 128-bit hex ID. It panics if crypto/rand fails.
+// This is intentional: on any modern OS, crypto/rand fails only on catastrophic
+// entropy exhaustion, at which point safe ID generation is impossible and
+// continuing would silently produce collisions or guessable IDs.
 func defaultID() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {

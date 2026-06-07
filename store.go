@@ -93,16 +93,16 @@ type Actum struct {
 // Validate reports whether the actum is well-formed for recording.
 // Returns ErrInvalidActum (wrapped) describing the first violation found.
 //
-// Content MUST be non-empty. This constraint may be relaxed per-Kind in a
-// future revision when structured payloads are introduced.
+// Content requirements are per-Kind:
+//   - ActumMessage, ActumThought: Content MUST be non-empty.
+//   - ActumToolRequest, ActumToolResponse: Content MAY be empty (no-argument
+//     calls and void results are legitimate).
 func (a Actum) Validate() error {
-	switch {
-	case a.ChronicumID == "":
+	if a.ChronicumID == "" {
 		return fmt.Errorf("%w: ChronicumID is empty", ErrInvalidActum)
-	case a.Actor == "":
+	}
+	if a.Actor == "" {
 		return fmt.Errorf("%w: Actor is empty", ErrInvalidActum)
-	case a.Content == "":
-		return fmt.Errorf("%w: Content is empty", ErrInvalidActum)
 	}
 
 	switch a.Kind {
@@ -117,6 +117,13 @@ func (a Actum) Validate() error {
 		// valid
 	default:
 		return fmt.Errorf("%w: unknown ActorKind %q", ErrInvalidActum, a.ActorKind)
+	}
+
+	switch a.Kind {
+	case ActumMessage, ActumThought:
+		if a.Content == "" {
+			return fmt.Errorf("%w: Content is empty", ErrInvalidActum)
+		}
 	}
 
 	return nil

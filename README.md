@@ -54,6 +54,8 @@ go get go.naturallyfunny.dev/chronica
 
 ### 0. Pick (or implement) a Store
 
+> ⚠️ **Disclaimer:** This SDK (including its design, implementation, and tests) was designed and written entirely by Claude. It was originally built for testing/experimentation purposes. Use with caution. It is **not recommended for production use** unless you have independently verified that the implementation meets your requirements.
+
 The SDK ships a thread-safe in-memory store for development and tests:
 
 ```go
