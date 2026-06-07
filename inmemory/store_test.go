@@ -8,6 +8,6 @@ import (
 )
 
 func TestConformance(t *testing.T) {
-	storeconformance.Run(t, inmemory.NewStore)
-	storeconformance.RunIdempotent(t, inmemory.NewIdempotentStore)
+	storeconformance.RunTest(t, inmemory.NewStore)
+	storeconformance.RunIdempotentTest(t, inmemory.NewIdempotentStore)
 }

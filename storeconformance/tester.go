@@ -5,11 +5,11 @@
 // Usage:
 //
 //	func TestConformance(t *testing.T) {
-//	    storeconformance.Run(t, func() chronica.Store {
+//	    storeconformance.RunTest(t, func() chronica.Store {
 //	        return newMyBackend(t)
 //	    })
 //	    // if the backend also implements IdempotentStore:
-//	    storeconformance.RunIdempotent(t, func() chronica.IdempotentStore {
+//	    storeconformance.RunIdempotentTest(t, func() chronica.IdempotentStore {
 //	        return newMyIdempotentBackend(t)
 //	    })
 //	}
@@ -26,9 +26,9 @@ import (
 	"go.naturallyfunny.dev/chronica"
 )
 
-// Run runs the base Store conformance suite.
+// RunTest runs the base Store conformance suite.
 // newStore is called once per sub-test and MUST return a fresh, empty store.
-func Run(t *testing.T, newStore func() chronica.Store) {
+func RunTest(t *testing.T, newStore func() chronica.Store) {
 	t.Helper()
 	cases := []struct {
 		name string
@@ -46,7 +46,6 @@ func Run(t *testing.T, newStore func() chronica.Store) {
 		{"ConcurrentAppend", testConcurrentAppend},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			tc.fn(t, newStore())
@@ -54,9 +53,9 @@ func Run(t *testing.T, newStore func() chronica.Store) {
 	}
 }
 
-// RunIdempotent runs the IdempotentStore conformance suite.
+// RunIdempotentTest runs the IdempotentStore conformance suite.
 // newStore is called once per sub-test and MUST return a fresh, empty store.
-func RunIdempotent(t *testing.T, newStore func() chronica.IdempotentStore) {
+func RunIdempotentTest(t *testing.T, newStore func() chronica.IdempotentStore) {
 	t.Helper()
 	cases := []struct {
 		name string

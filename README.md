@@ -65,7 +65,7 @@ import (
 c := chronica.NewChronicarius(inmemory.NewStore())
 ```
 
-To use a real backend (e.g. Postgres, MongoDB), implement the four-method `chronica.Store` interface and pass it to `chronica.NewChronicarius`. Verify it with `storeconformance.Run`. If your backend also implements `chronica.IdempotentStore` (i.e. supports `WithIdempotencyKey`), verify that too with `storeconformance.RunIdempotent`.
+To use a real backend (e.g. Postgres, MongoDB), implement the four-method `chronica.Store` interface and pass it to `chronica.NewChronicarius`. Verify it with `storeconformance.RunTest`. If your backend also implements `chronica.IdempotentStore` (i.e. supports `WithIdempotencyKey`), verify that too with `storeconformance.RunIdempotentTest`.
 
 ### 1. Recording an Action (RecordActum)
 
