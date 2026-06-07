@@ -4,9 +4,9 @@ import (
 	"testing"
 
 	"go.naturallyfunny.dev/chronica/inmemory"
-	"go.naturallyfunny.dev/chronica/storetest"
+	"go.naturallyfunny.dev/chronica/storeconformance"
 )
 
 func TestConformance(t *testing.T) {
-	storetest.Run(t, inmemory.NewStore)
+	storeconformance.Run(t, inmemory.NewStore)
 }

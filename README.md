@@ -8,7 +8,7 @@ _  /    __  /_/ /__  /_/ /  / / /_   |/ / __  / _  /    __  /| |
 
 A lightweight, 1 Human to N Agent Session System SDK designed for Single-Agent to Multi-Agent Agentic AI ecosystems.
 
-Chronica treats AI conversations not just as text messages, but as a stream of **Actions (Actum)** within a **Session (Chronicum)**. It is built with pure Go idioms, functional options, and strict chronological contracts. 
+Chronica treats AI conversations not just as text messages, but as a stream of **Actions (Acta)** within a **Session (Chronicum)**. Built with pure Go idioms, functional options, and strict chronological contracts.
 
 ## Key Features
 
@@ -50,7 +50,7 @@ import (
 c := chronica.NewChronicarius(inmemory.NewStore())
 ```
 
-To use a real backend (e.g. Postgres, MongoDB), implement the four-method `chronica.Store` interface and pass it to `chronica.NewChronicarius`. Your backend can be verified against the conformance suite using `storetest.Run`.
+To use a real backend (e.g. Postgres, MongoDB), implement the four-method `chronica.Store` interface and pass it to `chronica.NewChronicarius`. Your backend can be verified against the conformance suite using `storeconformance.Run`.
 
 ### 1. Recording an Action (RecordActum)
 

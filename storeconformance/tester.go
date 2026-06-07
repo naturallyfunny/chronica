@@ -1,14 +1,14 @@
-// Package storetest provides a conformance test suite for chronica.Store
+// Package storeconformance provides a conformance test suite for chronica.Store
 // implementations. Each backend calls Run from its own test file.
 //
 // Usage:
 //
 //	func TestConformance(t *testing.T) {
-//	    storetest.Run(t, func() chronica.Store {
+//	    storeconformance.Run(t, func() chronica.Store {
 //	        return newMyBackend(t)
 //	    })
 //	}
-package storetest
+package storeconformance
 
 import (
 	"context"
@@ -177,7 +177,6 @@ func testFilterThenLimit(t *testing.T, store chronica.Store) {
 			t.Errorf("acta[%d]: want message, got %s", i, a.Kind)
 		}
 	}
-	// last 3 messages in insertion order
 	wantIDs := messageIDs[2:]
 	for i, a := range acta {
 		if a.ID != wantIDs[i] {
@@ -191,7 +190,6 @@ func testFilterActorKinds(t *testing.T, store chronica.Store) {
 	ctx := context.Background()
 	store.Create(ctx, chronica.Chronicum{ID: "cid", OwnerID: "owner"})
 
-	// Setup: Record some human, agent, and system acta.
 	var humanIDs []string
 	for i := 0; i < 3; i++ {
 		a := makeActum(fmt.Sprintf("h-%d", i), "cid", fmt.Sprintf("human message %d", i))
@@ -215,7 +213,6 @@ func testFilterActorKinds(t *testing.T, store chronica.Store) {
 		}
 	}
 
-	// 1. Query only Human actor kinds.
 	acta, err := store.Acta(ctx, "cid", chronica.ActaQuery{
 		ActorKinds: []chronica.ActorKind{chronica.ActorHuman},
 	})
@@ -234,10 +231,6 @@ func testFilterActorKinds(t *testing.T, store chronica.Store) {
 		}
 	}
 
-	// 2. Query Human and Agent actor kinds, with LastN limit.
-	// Since order of inserts: h0, s0, a0, h1, s1, a1, h2, s2, a2
-	// Filtered (Human/Agent): h0, a0, h1, a1, h2, a2 (total 6)
-	// LastN: 3 -> a1, h2, a2
 	acta, err = store.Acta(ctx, "cid", chronica.ActaQuery{
 		ActorKinds: []chronica.ActorKind{chronica.ActorHuman, chronica.ActorAgent},
 		LastN:      3,
